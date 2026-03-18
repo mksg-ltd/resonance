@@ -2,9 +2,9 @@
 Search lyrics in Qdrant by semantic similarity.
 
 Usage:
-    python search.py "your query here"
-    python search.py "your query" --artist "Coldplay"
-    python search.py "your query" --collection lyrics_10 --model large
+    python -m lrc_match.search "your query here"
+    python -m lrc_match.search "your query" --artist "Coldplay"
+    python -m lrc_match.search "your query" --collection lyrics_10 --model large
 """
 
 import os
@@ -27,13 +27,9 @@ def search(query: str, collection: str, model: str, artist: str | None = None, l
     openai_client = OpenAI(api_key=os.getenv("OPEN_AI_KEY"))
     qdrant_client = QdrantClient(url="http://localhost:6333")
 
-    # Embed the query with the same model used for ingestion.
-    # This is critical — query and stored vectors must come from
-    # the same model to be comparable in the same vector space.
     response = openai_client.embeddings.create(model=model, input=query)
     query_vector = response.data[0].embedding
 
-    # Build filter if artist specified
     query_filter = None
     if artist:
         query_filter = Filter(
@@ -60,21 +56,28 @@ def search(query: str, collection: str, model: str, artist: str | None = None, l
         print(
             f"     Section: {p['section']} (part {p['position'] + 1}/{p['total_sections']})"
         )
-        # Show first 2 lines of lyrics
         lyrics_preview = p["lyrics"].split("\n")[:2]
         for line in lyrics_preview:
             print(f"     | {line}")
         print()
 
 
-if __name__ == "__main__":
+def main():
     parser = ArgumentParser(description="Search lyrics by semantic similarity")
     parser.add_argument("query", help="Natural language query")
     parser.add_argument("--artist", help="Filter by artist name")
     parser.add_argument("--collection", default="lyrics", help="Qdrant collection name")
-    parser.add_argument("--model", choices=["small", "large"], default="small",
-                        help="Embedding model (must match what was used for ingestion)")
+    parser.add_argument(
+        "--model",
+        choices=["small", "large"],
+        default="small",
+        help="Embedding model (must match what was used for ingestion)",
+    )
     parser.add_argument("--limit", type=int, default=15, help="Number of results")
     args = parser.parse_args()
 
     search(args.query, args.collection, MODELS[args.model], artist=args.artist, limit=args.limit)
+
+
+if __name__ == "__main__":
+    main()
