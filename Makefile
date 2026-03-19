@@ -1,5 +1,11 @@
 .PHONY: help up down clean run test lint install build
 
+# Load .env if present
+ifneq (,$(wildcard .env))
+    include .env
+    export
+endif
+
 # Color output
 BLUE := \033[0;34m
 GREEN := \033[0;32m
