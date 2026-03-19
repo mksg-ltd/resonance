@@ -17,12 +17,6 @@ test: ## Run pytest
 	@printf "$(BLUE)Running tests...$(RESET)\n"
 	uv run pytest -q || test $$? -eq 5
 
-lint: ## Run ruff linter + formatter check
-	@printf "$(BLUE)Running linters...$(RESET)\n"
-	uv run ruff check src/
-	uv run ruff format --check src/
-	@printf "$(GREEN)Done$(RESET)\n"
-
 install: ## Install dependencies + pre-commit hooks
 	@printf "$(BLUE)Installing dependencies...$(RESET)\n"
 	uv sync
