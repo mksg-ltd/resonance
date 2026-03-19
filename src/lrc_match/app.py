@@ -1,0 +1,60 @@
+"""FastAPI application factory."""
+
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
+import uvicorn
+from fastapi import FastAPI
+from qdrant_client import QdrantClient
+
+from lrc_match.config import Settings, load_settings
+from lrc_match.routes.health import router as health_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+    """Initialize shared resources on startup, clean up on shutdown."""
+    settings: Settings = app.state.settings
+    qdrant = QdrantClient(
+        url=settings.qdrant.url,
+        api_key=settings.qdrant.api_key.get_secret_value() if settings.qdrant.api_key else None,
+    )
+    app.state.qdrant = qdrant
+    yield
+    qdrant.close()
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    """Create and configure the FastAPI application."""
+    if settings is None:
+        settings = load_settings()
+
+    docs_url = "/docs" if settings.server.debug else None
+    redoc_url = "/redoc" if settings.server.debug else None
+
+    app = FastAPI(
+        title="lrc-match",
+        description="Semantic search over song lyrics",
+        version="0.1.0",
+        docs_url=docs_url,
+        redoc_url=redoc_url,
+        lifespan=lifespan,
+    )
+    app.state.settings = settings
+
+    # Register routes
+    app.include_router(health_router)
+
+    return app
+
+
+def cli() -> None:
+    """CLI entry point for lrc-server command."""
+    settings = load_settings()
+    uvicorn.run(
+        "lrc_match.app:create_app",
+        factory=True,
+        host=settings.server.host,
+        port=settings.server.port,
+        reload=settings.server.debug,
+    )
