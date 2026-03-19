@@ -21,6 +21,9 @@ MUSIC_DIR = Path("/data/media/music/english")
 class IngestRequest(BaseModel):
     """Ingest request body."""
 
+    collection: str | None = None
+    gap_threshold_sec: float | None = None
+    min_chunk_lines: int | None = None
     force: bool = False
 
 
@@ -47,11 +50,14 @@ class IngestResult:
     stored_model: str | None = None
 
 
-def run_ingest(
+def run_ingest(  # noqa: PLR0913
     qdrant: QdrantClient,
     embedder: EmbeddingProvider,
     settings: Settings,
     *,
+    collection: str | None = None,
+    gap_threshold_sec: float | None = None,
+    min_chunk_lines: int | None = None,
     force: bool = False,
     data_dir: Path | None = None,
 ) -> IngestResult:
@@ -60,9 +66,9 @@ def run_ingest(
     Parses LRC files, chunks them, embeds with the configured provider,
     and stores vectors + metadata in Qdrant.
     """
-    collection = settings.qdrant.collection
+    collection = collection or settings.qdrant.collection
     source_dir = data_dir or MUSIC_DIR
-    gap_threshold = settings.chunking.gap_threshold_sec
+    gap_threshold = gap_threshold_sec if gap_threshold_sec is not None else settings.chunking.gap_threshold_sec
 
     # Check if collection exists and has data
     existing_collections = [c.name for c in qdrant.get_collections().collections]
@@ -187,17 +193,21 @@ def _store_collection_metadata(qdrant: QdrantClient, collection: str, embedder: 
 @router.post("/ingest", response_model=IngestResponse)
 def ingest(body: IngestRequest, request: Request) -> IngestResponse:
     """Trigger LRC ingestion pipeline."""
+    collection = body.collection or request.app.state.settings.qdrant.collection
     result = run_ingest(
         qdrant=request.app.state.qdrant,
         embedder=request.app.state.embedder,
         settings=request.app.state.settings,
+        collection=body.collection,
+        gap_threshold_sec=body.gap_threshold_sec,
+        min_chunk_lines=body.min_chunk_lines,
         force=body.force,
     )
 
     return IngestResponse(
         files_processed=result.files_processed,
         chunks_created=result.chunks_created,
-        collection=request.app.state.settings.qdrant.collection,
+        collection=collection,
         skipped=result.skipped,
         model_mismatch=result.model_mismatch,
         stored_model=result.stored_model,

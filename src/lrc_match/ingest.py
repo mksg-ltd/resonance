@@ -21,6 +21,10 @@ from .routes.ingest import run_ingest
 def main():
     parser = ArgumentParser(description="Ingest LRC lyrics into Qdrant")
     parser.add_argument(
+        "--collection",
+        help="Qdrant collection name (default: from config)",
+    )
+    parser.add_argument(
         "--gap",
         type=float,
         help="Gap threshold in seconds for temporal chunking (overrides config)",
@@ -38,21 +42,17 @@ def main():
     args = parser.parse_args()
 
     settings = load_settings()
-
-    if args.gap is not None:
-        settings.chunking.gap_threshold_sec = args.gap
-
     embedder = create_embedder(settings)
     qdrant = QdrantClient(
         url=settings.qdrant.url,
         api_key=settings.qdrant.api_key.get_secret_value() if settings.qdrant.api_key else None,
     )
 
-    collection = settings.qdrant.collection
+    collection = args.collection or settings.qdrant.collection
     print(
         f"Config: collection={collection}, provider={embedder.provider_name}, "
         f"model={embedder.model_name} ({embedder.dimensions}d), "
-        f"gap={settings.chunking.gap_threshold_sec}s"
+        f"gap={args.gap or settings.chunking.gap_threshold_sec}s"
     )
 
     print("Starting ingestion...")
@@ -60,6 +60,8 @@ def main():
         qdrant=qdrant,
         embedder=embedder,
         settings=settings,
+        collection=args.collection,
+        gap_threshold_sec=args.gap,
         force=args.force,
         data_dir=args.data_dir,
     )
