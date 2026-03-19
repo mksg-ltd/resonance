@@ -1,5 +1,6 @@
 """FastAPI application factory."""
 
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -8,7 +9,14 @@ from fastapi import FastAPI
 from qdrant_client import QdrantClient
 
 from lrc_match.config import Settings, load_settings
+from lrc_match.embedders import create_embedder
+from lrc_match.routes.collections import router as collections_router
+from lrc_match.routes.config import router as config_router
 from lrc_match.routes.health import router as health_router
+from lrc_match.routes.ingest import router as ingest_router
+from lrc_match.routes.search import router as search_router
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -20,6 +28,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         api_key=settings.qdrant.api_key.get_secret_value() if settings.qdrant.api_key else None,
     )
     app.state.qdrant = qdrant
+
+    # Initialize embedder (may fail if provider config missing — that's OK at startup)
+    try:
+        app.state.embedder = create_embedder(settings)
+    except ValueError:
+        logger.warning("Embedder not configured — search and ingest endpoints will fail until provider is set up")
+        app.state.embedder = None
+
     yield
     qdrant.close()
 
@@ -44,6 +60,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Register routes
     app.include_router(health_router)
+    app.include_router(search_router)
+    app.include_router(ingest_router)
+    app.include_router(config_router)
+    app.include_router(collections_router)
 
     return app
 
