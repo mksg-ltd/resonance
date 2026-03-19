@@ -67,9 +67,7 @@ def main():
     args = parser.parse_args()
 
     model_name, embedding_dim = MODELS[args.model]
-    print(
-        f"Config: collection={args.collection}, model={model_name} ({embedding_dim}d), gap={args.gap}s"
-    )
+    print(f"Config: collection={args.collection}, model={model_name} ({embedding_dim}d), gap={args.gap}s")
 
     openai_client = OpenAI(api_key=os.getenv("OPEN_AI_KEY"))
     qdrant_client = QdrantClient(url="http://localhost:6333")
@@ -86,20 +84,20 @@ def main():
             skipped += 1
             continue
 
-        for chunk in lyric.chunks:
-            chunks_to_embed.append(
-                {
-                    "artist": lyric.artist,
-                    "title": lyric.title,
-                    "filename": lyric.filename,
-                    "section": chunk.section_name,
-                    "position": chunk.position,
-                    "total_sections": chunk.total_chunks,
-                    "lyrics": chunk.lyrics,
-                    "start_sec": chunk.start_sec,
-                    "duration_sec": chunk.duration_sec,
-                }
-            )
+        chunks_to_embed.extend(
+            {
+                "artist": lyric.artist,
+                "title": lyric.title,
+                "filename": lyric.filename,
+                "section": chunk.section_name,
+                "position": chunk.position,
+                "total_sections": chunk.total_chunks,
+                "lyrics": chunk.lyrics,
+                "start_sec": chunk.start_sec,
+                "duration_sec": chunk.duration_sec,
+            }
+            for chunk in lyric.chunks
+        )
 
     print(
         f"Created {len(chunks_to_embed)} chunks from "
@@ -109,9 +107,9 @@ def main():
 
     setup_collection(qdrant_client, args.collection, embedding_dim)
 
-    BATCH_SIZE = 64
-    for i in range(0, len(chunks_to_embed), BATCH_SIZE):
-        batch = chunks_to_embed[i : i + BATCH_SIZE]
+    batch_size = 64
+    for i in range(0, len(chunks_to_embed), batch_size):
+        batch = chunks_to_embed[i : i + batch_size]
         lyrics_texts = [c["lyrics"] for c in batch]
         vectors = embed_texts(openai_client, lyrics_texts, model_name)
 
@@ -131,7 +129,7 @@ def main():
                     "duration_sec": chunk["duration_sec"],
                 },
             )
-            for j, (chunk, vec) in enumerate(zip(batch, vectors))
+            for j, (chunk, vec) in enumerate(zip(batch, vectors, strict=True))
         ]
 
         qdrant_client.upsert(collection_name=args.collection, points=points)

@@ -32,9 +32,7 @@ def search(query: str, collection: str, model: str, artist: str | None = None, l
 
     query_filter = None
     if artist:
-        query_filter = Filter(
-            must=[FieldCondition(key="artist", match=MatchValue(value=artist))]
-        )
+        query_filter = Filter(must=[FieldCondition(key="artist", match=MatchValue(value=artist))])
 
     results = qdrant_client.query_points(
         collection_name=collection,
@@ -53,9 +51,7 @@ def search(query: str, collection: str, model: str, artist: str | None = None, l
         p = point.payload
         score = point.score
         print(f"  {i}. [{score:.4f}] {p['artist']} — {p['title']}")
-        print(
-            f"     Section: {p['section']} (part {p['position'] + 1}/{p['total_sections']})"
-        )
+        print(f"     Section: {p['section']} (part {p['position'] + 1}/{p['total_sections']})")
         lyrics_preview = p["lyrics"].split("\n")[:2]
         for line in lyrics_preview:
             print(f"     | {line}")
