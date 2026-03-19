@@ -9,4 +9,6 @@ type: user
 - Interested in self-hosted solutions (Qdrant appeals for this reason)
 - Prefers understanding concepts deeply over just getting working code
 - Comfortable with Python, Docker, CLI tools (uses fd, uv)
-- macOS user with zsh
+- Fedora Linux user with zsh
+- No React/Vue experience — only Django for web dev
+- Plans to open-source lrc-match for the Jellyfin community

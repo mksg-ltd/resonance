@@ -2,7 +2,7 @@
 phase: launch
 status: ready
 created: 2026-03-18
-updated: 2026-03-18
+updated: 2026-03-19
 author: mk
 tags: [jellyfin, plugin, integration]
 ---
@@ -37,7 +37,12 @@ Research areas:
 3. **API surface**: REST API for library queries, playlist CRUD, user sessions
 4. **Integration patterns**: plugin vs external service vs both (plugin as thin client to external Qdrant service)
 
-Key question: should lrc-match be a Jellyfin plugin (C#) that talks to Qdrant, or a standalone Python service that talks to Jellyfin's API?
+**Decision (2026-03-19):** lrc-match is a standalone FastAPI service (PRD-06). The
+Jellyfin plugin would be a thin UI client that renders inside Jellyfin's web interface
+and calls the FastAPI endpoints over HTTP. The plugin does NOT talk to Qdrant directly.
+
+Remaining research question: can Jellyfin plugins serve custom UI pages within the
+Jellyfin web interface, or only extend existing ones?
 
 ## Implementation Plan
 
@@ -64,4 +69,6 @@ Key question: should lrc-match be a Jellyfin plugin (C#) that talks to Qdrant, o
 
 ## Changelog
 
+- 2026-03-19: Updated — architecture decision made. Plugin is a thin client to
+  FastAPI service (PRD-06), not a standalone C#/Qdrant integration.
 - 2026-03-18: Initial draft

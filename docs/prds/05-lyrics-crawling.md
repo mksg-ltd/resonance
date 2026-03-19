@@ -2,7 +2,7 @@
 phase: launch
 status: ready
 created: 2026-03-18
-updated: 2026-03-18
+updated: 2026-03-19
 author: mk
 tags: [crawling, lyrics, ingestion, jellyfin]
 ---
@@ -92,10 +92,13 @@ Track what's been ingested:
 - Should we extract audio metadata (genre, year, BPM) as Qdrant payload even if lyrics aren't available?
 - How does mutagen handle the variety of embedded lyrics formats across MP3/FLAC/M4A?
 - What percentage of a typical library has lyrics available from LrcLib?
-- Should the crawler run as a background service or on-demand CLI?
+- ~~Should the crawler run as a background service or on-demand CLI?~~
+  **Decision (2026-03-19):** Exposed as `POST /api/ingest` endpoint in the FastAPI
+  service (PRD-06). CLI retained as a convenience wrapper.
 
 ---
 
 ## Changelog
 
+- 2026-03-19: Updated — crawler exposed as FastAPI endpoint (PRD-06), not standalone service.
 - 2026-03-18: Initial draft

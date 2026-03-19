@@ -4,8 +4,10 @@ description: User wants conceptual depth and explanations around vector DB / ML 
 type: feedback
 ---
 
-User is learning vector databases and embeddings. Conceptual over-engineering and knowledge sharing is welcome — explain the "why" behind things, not just the "how". Code-level over-engineering should still be avoided.
+User is learning vector databases and embeddings. Conceptual depth is welcome ONLY around Qdrant, vectors, and embedding concepts — explain the "why" behind things, not just the "how".
 
-**Why:** The project is explicitly for learning concepts (pgvector → Qdrant progression). User wants to understand trade-offs, architecture decisions, and how things work under the hood.
+For everything else (FastAPI, config, project plumbing, Python patterns), treat as plumbing — the user knows what they're doing. Be concise, don't over-explain.
 
-**How to apply:** When building out the lrc-match project, explain concepts like HNSW indexing, distance metrics, quantization, payload filtering, etc. as they come up naturally. Keep code simple but be generous with conceptual context.
+**Why:** The project is explicitly for learning vector/embedding concepts (pgvector → Qdrant progression). But the user has strong Python/Django experience and doesn't need hand-holding on web frameworks, config patterns, or project setup.
+
+**How to apply:** When touching Qdrant, embeddings, HNSW, distance metrics, quantization, payload filtering — explain concepts as they come up. For FastAPI routes, pydantic config, pre-commit hooks, Makefile targets — just do it, skip the lecture.
