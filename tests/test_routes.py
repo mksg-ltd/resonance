@@ -18,6 +18,7 @@ def _make_test_client(debug: bool = True) -> tuple[TestClient, MagicMock, MagicM
 
     mock_qdrant = MagicMock()
     mock_qdrant.get_collections.return_value = MagicMock(collections=[])
+    mock_qdrant.retrieve.return_value = []  # No metadata point — use default embedder
     app.state.qdrant = mock_qdrant
 
     mock_embedder = MagicMock()

@@ -8,7 +8,7 @@ from .base import EmbeddingProvider
 from .ollama import OllamaEmbedder
 from .openai import OpenAIEmbedder
 
-__all__ = ["EmbeddingProvider", "OllamaEmbedder", "OpenAIEmbedder", "create_embedder"]
+__all__ = ["EmbeddingProvider", "OllamaEmbedder", "OpenAIEmbedder", "create_embedder", "get_embedder_for_provider"]
 
 
 def create_embedder(settings: Settings, config_dir: Path | None = None) -> EmbeddingProvider:
@@ -40,3 +40,32 @@ def create_embedder(settings: Settings, config_dir: Path | None = None) -> Embed
 
     msg = f"Unknown embedding provider: {provider}. Supported: openai, ollama"
     raise ValueError(msg)
+
+
+# Cache of embedders by "provider:model" key
+_embedder_cache: dict[str, EmbeddingProvider] = {}
+
+
+def get_embedder_for_provider(provider: str, config_dir: Path | None = None) -> EmbeddingProvider:
+    """Get or create an embedder for a specific provider. Cached."""
+    cache_key = provider
+    if cache_key in _embedder_cache:
+        return _embedder_cache[cache_key]
+
+    provider_config = load_provider_config(provider, config_dir=config_dir)
+    if provider == "openai":
+        if provider_config is None:
+            msg = "Cannot create OpenAI embedder — no conf.d/openai.yaml found"
+            raise ValueError(msg)
+        embedder = OpenAIEmbedder(provider_config)
+    elif provider == "ollama":
+        if provider_config is None:
+            msg = "Cannot create Ollama embedder — no conf.d/ollama.yaml found"
+            raise ValueError(msg)
+        embedder = OllamaEmbedder(provider_config)
+    else:
+        msg = f"Unknown provider: {provider}"
+        raise ValueError(msg)
+
+    _embedder_cache[cache_key] = embedder
+    return embedder

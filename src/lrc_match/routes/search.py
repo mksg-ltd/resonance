@@ -83,15 +83,32 @@ def run_search(  # noqa: PLR0913
     return sorted(seen.values(), key=lambda r: r.score, reverse=True)[:limit]
 
 
+def _get_collection_provider(qdrant: QdrantClient, collection: str) -> str | None:
+    """Read the provider from collection metadata (point id=0)."""
+    try:
+        points = qdrant.retrieve(collection_name=collection, ids=[0])
+        if points and points[0].payload and points[0].payload.get("_metadata"):
+            return points[0].payload.get("provider")
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
 @router.post("/search", response_model=SearchResponse)
 def search(body: SearchRequest, request: Request) -> SearchResponse:
-    """Semantic lyric search."""
+    """Semantic lyric search. Auto-selects embedder based on collection metadata."""
+    from lrc_match.embedders import get_embedder_for_provider
+
     settings = request.app.state.settings
     collection = body.collection or settings.qdrant.collection
-    embedder = request.app.state.embedder
+    qdrant = request.app.state.qdrant
+
+    # Pick the right embedder for this collection
+    stored_provider = _get_collection_provider(qdrant, collection)
+    embedder = get_embedder_for_provider(stored_provider) if stored_provider else request.app.state.embedder
 
     results = run_search(
-        qdrant=request.app.state.qdrant,
+        qdrant=qdrant,
         embedder=embedder,
         query=body.query,
         collection=collection,
