@@ -37,6 +37,7 @@ packages = ["src/lrc_match"]
 lrc-ingest = "lrc_match.ingest:main"
 lrc-search = "lrc_match.search:main"
 lrc-server = "lrc_match.app:cli"
+lrc-dev = "lrc_match.app:dev"
 
 [tool.ruff]
 exclude = [

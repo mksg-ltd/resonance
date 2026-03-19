@@ -9,9 +9,9 @@ help: ## Show this help message
 	@printf "$(GREEN)lrc-match Development Commands:$(RESET)\n"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[0;34m%-15s\033[0m %s\n", $$1, $$2}'
 
-run: ## Start FastAPI dev server with auto-reload
-	@printf "$(BLUE)Starting lrc-match server at http://localhost:8000$(RESET)\n"
-	uv run uvicorn lrc_match.app:create_app --factory --host 0.0.0.0 --port 8000 --reload
+run: ## Start dev server (debug mode, auto-reload, Swagger UI at /docs)
+	@printf "$(BLUE)Starting lrc-match dev server at http://localhost:8000/docs$(RESET)\n"
+	uv run lrc-dev
 
 test: ## Run pytest
 	@printf "$(BLUE)Running tests...$(RESET)\n"

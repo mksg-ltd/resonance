@@ -27,7 +27,7 @@ Config is YAML-first. Most users configure via `config/config.yml` and never tou
 
 ## Commands
 
-- `make run` — start FastAPI dev server with auto-reload
+- `make run` — start dev server (debug mode, Swagger UI at /docs, auto-reload)
 - `make test` — run pytest
 - `make lint` — ruff check + format check
 - `make install` — uv sync + pre-commit hooks

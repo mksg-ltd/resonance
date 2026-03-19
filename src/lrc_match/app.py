@@ -77,4 +77,21 @@ def cli() -> None:
         host=settings.server.host,
         port=settings.server.port,
         reload=settings.server.debug,
+        log_level="info",
+    )
+
+
+def dev() -> None:
+    """CLI entry point for local development — always enables debug + reload."""
+    import os
+
+    os.environ["LRC_MATCH__SERVER__DEBUG"] = "true"
+    settings = load_settings()
+    uvicorn.run(
+        "lrc_match.app:create_app",
+        factory=True,
+        host=settings.server.host,
+        port=settings.server.port,
+        reload=True,
+        log_level="info",
     )

@@ -33,9 +33,6 @@ COPY --from=builder /app/pyproject.toml /app/
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 
-# Default config location
-ENV LRC_MATCH_CONFIG=/app/config/config.yml
-
 EXPOSE 8000
 
 USER appuser
