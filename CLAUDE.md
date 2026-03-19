@@ -23,7 +23,7 @@ API-first design. All functionality exposed as FastAPI endpoints. Three clients 
 2. **Swagger UI** — enabled in debug mode, the dev interface
 3. **CLI tools** — `lrc-ingest`, `lrc-search` for command-line use
 
-Config is YAML-first. Most users configure via `config.yaml` and never touch a web UI. Provider-specific settings (API keys, model names) live in `conf.d/{provider}.yaml`.
+Config is YAML-first. Most users configure via `config/config.yml` and never touch a web UI. Provider-specific settings (API keys, model names) live in `config/conf.d/{provider}.yaml`.
 
 ## Commands
 

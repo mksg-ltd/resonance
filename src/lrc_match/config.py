@@ -108,16 +108,25 @@ def _expand_env_vars(data: dict) -> dict:
 
 
 def _find_config_file() -> Path | None:
-    """Find config file: env var → local → user home."""
+    """Find config file: env var → local → user home.
+
+    Checks both .yaml and .yml extensions.
+    """
     env_path = os.environ.get("LRC_MATCH_CONFIG")
     if env_path:
         path = Path(env_path)
         if path.is_file():
             return path
 
-    local = Path("config.yaml")
-    if local.is_file():
-        return local
+    # Local directory — check both flat and config/ subdirectory layouts
+    for candidate in [
+        Path("config.yaml"),
+        Path("config.yml"),
+        Path("config/config.yaml"),
+        Path("config/config.yml"),
+    ]:
+        if candidate.is_file():
+            return candidate
 
     home = Path.home() / ".config" / "lrc-match" / "config.yaml"
     if home.is_file():
@@ -138,26 +147,31 @@ def _load_yaml(path: Path) -> dict:
 def load_provider_config(
     provider: str, config_dir: Path | None = None
 ) -> OpenAIProviderConfig | OllamaProviderConfig | None:
-    """Load provider-specific config from conf.d/{provider}.yaml."""
+    """Load provider-specific config from conf.d/{provider}.yaml.
+
+    Searches: explicit config_dir → conf.d/ → config/conf.d/ → ~/.config/lrc-match/conf.d/
+    """
     search_dirs = []
     if config_dir:
         search_dirs.append(config_dir)
     search_dirs.extend(
         [
             Path("conf.d"),
+            Path("config/conf.d"),
             Path.home() / ".config" / "lrc-match" / "conf.d",
         ]
     )
 
     for search_dir in search_dirs:
-        provider_file = search_dir / f"{provider}.yaml"
-        if provider_file.is_file():
-            data = _load_yaml(provider_file)
-            if provider == "openai":
-                return OpenAIProviderConfig(**data)
-            if provider == "ollama":
-                return OllamaProviderConfig(**data)
-            return None
+        for ext in ("yaml", "yml"):
+            provider_file = search_dir / f"{provider}.{ext}"
+            if provider_file.is_file():
+                data = _load_yaml(provider_file)
+                if provider == "openai":
+                    return OpenAIProviderConfig(**data)
+                if provider == "ollama":
+                    return OllamaProviderConfig(**data)
+                return None
 
     return None
 
