@@ -6,3 +6,29 @@ services:
     ports:
       - "6333:6333"
       - "6334:6334"
+
+  lrc-match:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./conf.d:/app/conf.d:ro
+      - /data/media/music/english:/data/media/music/english:ro
+    environment:
+      - LRC_MATCH__SERVER__DEBUG=true
+      - LRC_MATCH__QDRANT__URL=http://qdrant:6333
+    depends_on:
+      - qdrant
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
