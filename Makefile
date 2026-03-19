@@ -1,4 +1,4 @@
-.PHONY: help run test lint install build
+.PHONY: help up down clean run test lint install build
 
 # Color output
 BLUE := \033[0;34m
@@ -9,13 +9,34 @@ help: ## Show this help message
 	@printf "$(GREEN)lrc-match Development Commands:$(RESET)\n"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[0;34m%-15s\033[0m %s\n", $$1, $$2}'
 
-run: ## Start dev server (debug mode, auto-reload, Swagger UI at /docs)
-	@printf "$(BLUE)Starting lrc-match dev server at http://localhost:8000/docs$(RESET)\n"
+up: ## Start dev dependencies (Qdrant)
+	@printf "$(BLUE)Starting dev services...$(RESET)\n"
+	docker compose -f docker-compose.dev.yml up -d
+	@printf "$(GREEN)Qdrant running at http://localhost:6333$(RESET)\n"
+
+down: ## Stop dev dependencies
+	@printf "$(BLUE)Stopping dev services...$(RESET)\n"
+	docker compose -f docker-compose.dev.yml down
+	@printf "$(GREEN)Services stopped$(RESET)\n"
+
+clean: ## Stop services and remove volumes (fresh start)
+	@printf "$(BLUE)Cleaning Docker state...$(RESET)\n"
+	docker compose -f docker-compose.dev.yml down -v
+	@printf "$(GREEN)Clean state restored$(RESET)\n"
+
+run: up ## Start Qdrant + dev server (Swagger UI at /docs)
+	@printf "$(BLUE)Starting lrc-match at http://localhost:8000/docs$(RESET)\n"
 	uv run lrc-dev
 
 test: ## Run pytest
 	@printf "$(BLUE)Running tests...$(RESET)\n"
 	uv run pytest -q || test $$? -eq 5
+
+lint: ## Run ruff linter + formatter check
+	@printf "$(BLUE)Running linters...$(RESET)\n"
+	uv run ruff check src/
+	uv run ruff format --check src/
+	@printf "$(GREEN)Done$(RESET)\n"
 
 install: ## Install dependencies + pre-commit hooks
 	@printf "$(BLUE)Installing dependencies...$(RESET)\n"
