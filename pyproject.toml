@@ -2,12 +2,29 @@
 name = "lrc-match"
 version = "0.1.0"
 description = "Semantic search over song lyrics using Qdrant and OpenAI embeddings"
+authors = [{ name = "MK", email = "mk@mk.sg" }]
 requires-python = ">=3.14"
 dependencies = [
+    "fastapi>=0.115.0",
+    "httpx>=0.28.0",
     "openai>=2.29.0",
-    "python-dotenv>=1.2.2",
+    "pydantic-settings>=2.9.0",
+    "pyyaml>=6.0",
     "qdrant-client>=1.17.1",
+    "uvicorn[standard]>=0.34.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.0.0",
+    "pytest>=9.0.0",
+    "pytest-asyncio>=0.25.0",
+    "ruff>=0.12.0",
+    "ty>=0.0.1a15",
+]
+
+[tool.uv]
+default-groups = ["dev"]
 
 [build-system]
 requires = ["hatchling"]
@@ -19,3 +36,56 @@ packages = ["src/lrc_match"]
 [project.scripts]
 lrc-ingest = "lrc_match.ingest:main"
 lrc-search = "lrc_match.search:main"
+lrc-server = "lrc_match.app:cli"
+
+[tool.ruff]
+exclude = [
+    ".venv",
+    "__pycache__",
+]
+line-length = 120
+src = ["src"]
+target-version = "py314"
+
+[tool.ruff.lint]
+select = [
+    "A", "ASYNC", "B", "BLE", "C4", "C90", "COM", "DTZ",
+    "E", "EM", "ERA", "EXE", "F", "FA", "FBT", "FLY", "G",
+    "I", "ICN", "INP", "INT", "ISC", "N", "PERF", "PGH", "PIE",
+    "PL", "PT", "PTH", "PYI", "Q", "RET", "RSE", "RUF", "S",
+    "SIM", "SLF", "SLOT", "T10", "T20", "TID", "TRY", "UP", "W", "YTT",
+]
+ignore = [
+    "C901", "COM812", "PLC0415", "PLR0911", "PLR0912", "PLR2004",
+    "S110",
+]
+fixable = ["ALL"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/test_*.py" = ["BLE001", "S101", "S106", "SLF001"]
+"src/lrc_match/ingest.py" = ["T201"]
+"src/lrc_match/search.py" = ["T201"]
+
+[tool.ruff.format]
+indent-style = "space"
+line-ending = "auto"
+quote-style = "double"
+
+[tool.pytest.ini_options]
+python_files = ["test_*.py"]
+testpaths = ["tests"]
+
+[tool.ty.environment]
+python-version = "3.14"
+
+[tool.ty.src]
+exclude = [".venv"]
+
+[tool.ty.rules]
+unresolved-attribute = "ignore"
+unresolved-import = "ignore"
+invalid-return-type = "ignore"
+not-subscriptable = "ignore"
+unsupported-operator = "ignore"
+invalid-argument-type = "ignore"
+invalid-type-form = "ignore"

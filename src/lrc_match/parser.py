@@ -13,7 +13,7 @@ def parse_lrc_lines(filepath: Path) -> list[LrcLine]:
     """Parse an LRC file into timestamped lines."""
     try:
         text = filepath.read_text(encoding="utf-8")
-    except (UnicodeDecodeError, OSError):
+    except UnicodeDecodeError, OSError:
         return []
 
     lines = []
@@ -22,10 +22,7 @@ def parse_lrc_lines(filepath: Path) -> list[LrcLine]:
         if not m:
             continue
         mins, secs, frac = int(m.group(1)), int(m.group(2)), m.group(3)
-        if len(frac) == 2:
-            frac_sec = int(frac) / 100
-        else:
-            frac_sec = int(frac) / 1000
+        frac_sec = int(frac) / 100 if len(frac) == 2 else int(frac) / 1000
         timestamp = mins * 60 + secs + frac_sec
         text_content = m.group(4).strip()
         lines.append(LrcLine(timestamp_sec=timestamp, text=text_content))

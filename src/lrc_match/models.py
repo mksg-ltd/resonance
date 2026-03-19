@@ -73,7 +73,7 @@ class LrcLyric:
         return self.lines[-1].timestamp_sec - self.lines[0].timestamp_sec
 
     @classmethod
-    def from_file(cls, filepath: Path) -> "LrcLyric | None":
+    def from_file(cls, filepath: Path) -> LrcLyric | None:
         """Create an LrcLyric from an LRC file, extracting metadata from filename."""
         from .parser import parse_lrc_lines
 

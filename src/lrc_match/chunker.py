@@ -10,7 +10,6 @@ import re
 from pathlib import Path
 
 from .models import LrcChunk, LrcLine, LrcLyric
-from .parser import parse_lrc_lines
 
 # Matches section tags like [Chorus], [Verse 1-Akon], [Bridge], [Outro]
 SECTION_TAG_RE = re.compile(
@@ -38,7 +37,7 @@ def chunk_by_tags(lines: list[LrcLine]) -> list[LrcChunk]:
     for line in lines:
         tag_match = SECTION_TAG_RE.search(line.text)
         if tag_match:
-            if current_lines and any(l.text for l in current_lines):
+            if current_lines and any(line_.text for line_ in current_lines):
                 chunks.append(LrcChunk(section_name=current_name, lines=current_lines))
             current_name = tag_match.group(0).strip("[]")
             cleaned_text = SECTION_TAG_RE.sub("", line.text).strip()
@@ -46,7 +45,7 @@ def chunk_by_tags(lines: list[LrcLine]) -> list[LrcChunk]:
         else:
             current_lines.append(line)
 
-    if current_lines and any(l.text for l in current_lines):
+    if current_lines and any(line_.text for line_ in current_lines):
         chunks.append(LrcChunk(section_name=current_name, lines=current_lines))
 
     return chunks
@@ -83,7 +82,7 @@ def chunk_by_gaps(
     # Merge tiny chunks into neighbors
     merged = []
     for chunk_lines in raw_chunks:
-        content_lines = [l for l in chunk_lines if l.text]
+        content_lines = [line_ for line_ in chunk_lines if line_.text]
         if len(content_lines) < min_chunk_lines and merged:
             merged[-1].extend(chunk_lines)
         else:

@@ -1,7 +1,7 @@
 # FastAPI Service & Configuration Implementation Plan
 
 Created: 2026-03-19
-Status: PENDING
+Status: COMPLETE
 Approved: Yes
 Iterations: 0
 Branch: spec/fastapi-service
@@ -74,13 +74,13 @@ PRD: docs/prds/06-fastapi-service.md
 
 ## Feature Inventory — Files Being Refactored
 
-| Old File | Functions/Classes | Mapped to Task |
-|----------|-------------------|----------------|
-| `src/lrc_match/ingest.py` | `embed_texts()`, `setup_collection()`, `main()`, `MODELS` dict, `DATA_DIR`, OpenAI/Qdrant client creation | Task 3 (embedder extraction), Task 5 (ingest route) |
-| `src/lrc_match/search.py` | `search()`, `main()`, `MODELS` dict, OpenAI/Qdrant client creation | Task 3 (embedder extraction), Task 5 (search route) |
-| `src/lrc_match/models.py` | `LrcLine`, `LrcChunk`, `LrcLyric` | Unchanged — no task needed |
-| `src/lrc_match/parser.py` | `parse_lrc_lines()`, `TIMESTAMP_RE` | Unchanged — no task needed |
-| `src/lrc_match/chunker.py` | `chunk_song()`, `chunk_by_tags()`, `chunk_by_gaps()`, `has_section_tags()` | Unchanged — no task needed |
+| Old File                   | Functions/Classes                                                                                         | Mapped to Task                                      |
+| -------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `src/lrc_match/ingest.py`  | `embed_texts()`, `setup_collection()`, `main()`, `MODELS` dict, `DATA_DIR`, OpenAI/Qdrant client creation | Task 3 (embedder extraction), Task 5 (ingest route) |
+| `src/lrc_match/search.py`  | `search()`, `main()`, `MODELS` dict, OpenAI/Qdrant client creation                                        | Task 3 (embedder extraction), Task 5 (search route) |
+| `src/lrc_match/models.py`  | `LrcLine`, `LrcChunk`, `LrcLyric`                                                                         | Unchanged — no task needed                          |
+| `src/lrc_match/parser.py`  | `parse_lrc_lines()`, `TIMESTAMP_RE`                                                                       | Unchanged — no task needed                          |
+| `src/lrc_match/chunker.py` | `chunk_song()`, `chunk_by_tags()`, `chunk_by_gaps()`, `has_section_tags()`                                | Unchanged — no task needed                          |
 
 ### Feature Mapping Verification
 
@@ -93,14 +93,14 @@ PRD: docs/prds/06-fastapi-service.md
 
 **MANDATORY: Update this checklist as tasks complete. Change `[ ]` to `[x]`.**
 
-- [ ] Task 1: Project plumbing (pre-commit, Makefile, CLAUDE.md, pyproject.toml)
-- [ ] Task 2: Config layer (pydantic-settings + YAML)
-- [ ] Task 3: Embedding provider abstraction
-- [ ] Task 4: FastAPI app skeleton + health endpoint
-- [ ] Task 5: Search + ingest + config + collections routes
-- [ ] Task 6: Docker multi-stage build + updated compose
+- [x] Task 1: Project plumbing (pre-commit, Makefile, CLAUDE.md, pyproject.toml)
+- [x] Task 2: Config layer (pydantic-settings + YAML)
+- [x] Task 3: Embedding provider abstraction
+- [x] Task 4: FastAPI app skeleton + health endpoint
+- [x] Task 5: Search + ingest + config + collections routes
+- [x] Task 6: Docker multi-stage build + updated compose
 
-**Total Tasks:** 6 | **Completed:** 0 | **Remaining:** 6
+**Total Tasks:** 6 | **Completed:** 6 | **Remaining:** 0
 
 ## Implementation Tasks
 
@@ -393,12 +393,12 @@ PRD: docs/prds/06-fastapi-service.md
 
 ## Risks and Mitigations
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| pydantic-settings YAML loading requires custom glue | Med | Low | Keep it minimal: `yaml.safe_load()` → `Settings(**data)`. No framework. |
-| Ingest endpoint blocks for minutes on large libraries | Med | Med | Document this. Async endpoint runs in a thread. Future: background task. |
-| Collection metadata API differs across Qdrant versions | Low | Med | Use `collection_params` or payload-based metadata. Test against current Qdrant version. |
-| Existing CLI tools break during refactor | Med | High | Keep CLI `main()` functions working throughout. Run both CLI and API tests. |
+| Risk                                                   | Likelihood | Impact | Mitigation                                                                              |
+| ------------------------------------------------------ | ---------- | ------ | --------------------------------------------------------------------------------------- |
+| pydantic-settings YAML loading requires custom glue    | Med        | Low    | Keep it minimal: `yaml.safe_load()` → `Settings(**data)`. No framework.                 |
+| Ingest endpoint blocks for minutes on large libraries  | Med        | Med    | Document this. Async endpoint runs in a thread. Future: background task.                |
+| Collection metadata API differs across Qdrant versions | Low        | Med    | Use `collection_params` or payload-based metadata. Test against current Qdrant version. |
+| Existing CLI tools break during refactor               | Med        | High   | Keep CLI `main()` functions working throughout. Run both CLI and API tests.             |
 
 ## ADR Reference
 
