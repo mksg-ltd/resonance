@@ -105,7 +105,8 @@ class TestCreateEmbedder:
         assert isinstance(embedder, OllamaEmbedder)
         assert embedder.model_name == "nomic-embed-text"
 
-    def test_raises_for_missing_provider_config(self, tmp_path):
+    def test_raises_for_missing_provider_config(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
         settings = Settings(embedding={"provider": "openai"})
         try:
             create_embedder(settings, config_dir=tmp_path / "nonexistent")

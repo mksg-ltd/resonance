@@ -118,7 +118,8 @@ model: mxbai-embed-large
         assert config.base_url == "http://ollama:11434"
         assert config.model == "mxbai-embed-large"
 
-    def test_missing_provider_config_returns_none(self, tmp_path):
+    def test_missing_provider_config_returns_none(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
         config = load_provider_config("openai", config_dir=tmp_path / "nonexistent")
         assert config is None
 

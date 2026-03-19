@@ -28,7 +28,8 @@ class SearchResult(BaseModel):
     section: str
     position: int
     total_sections: int
-    lyrics_preview: str
+    lyrics: str
+    filename: str
 
 
 class SearchResponse(BaseModel):
@@ -73,7 +74,8 @@ def run_search(  # noqa: PLR0913
             section=p["section"],
             position=p["position"],
             total_sections=p["total_sections"],
-            lyrics_preview="\n".join(p["lyrics"].split("\n")[:2]),
+            lyrics=p["lyrics"],
+            filename=p["filename"],
         )
         if key not in seen or point.score > seen[key].score:
             seen[key] = result

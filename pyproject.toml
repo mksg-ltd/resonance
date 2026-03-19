@@ -38,6 +38,7 @@ lrc-ingest = "lrc_match.ingest:main"
 lrc-search = "lrc_match.search:main"
 lrc-server = "lrc_match.app:cli"
 lrc-dev = "lrc_match.app:dev"
+lrc-chunks = "lrc_match.chunks:main"
 
 [tool.ruff]
 exclude = [
@@ -66,6 +67,8 @@ fixable = ["ALL"]
 "**/test_*.py" = ["BLE001", "S101", "S106", "SLF001"]
 "src/lrc_match/ingest.py" = ["T201"]
 "src/lrc_match/search.py" = ["T201"]
+"src/lrc_match/routes/ingest.py" = ["T201"]
+"src/lrc_match/chunks.py" = ["T201"]
 
 [tool.ruff.format]
 indent-style = "space"

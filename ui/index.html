@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lrc-match</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #1a1b26;
+        color: #c0caf5;
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      h1 {
+        color: #7aa2f7;
+        margin-bottom: 20px;
+        font-size: 1.4em;
+      }
+      .controls {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        align-items: end;
+        flex-wrap: wrap;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .field label {
+        font-size: 0.75em;
+        color: #565f89;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      input,
+      select,
+      button {
+        background: #24283b;
+        border: 1px solid #3b4261;
+        color: #c0caf5;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 0.9em;
+      }
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: #7aa2f7;
+      }
+      button {
+        background: #7aa2f7;
+        color: #1a1b26;
+        cursor: pointer;
+        font-weight: 600;
+        border: none;
+      }
+      button:hover {
+        background: #89b4fa;
+      }
+      button:disabled {
+        background: #3b4261;
+        color: #565f89;
+        cursor: wait;
+      }
+      select {
+        min-width: 180px;
+      }
+      .result {
+        background: #24283b;
+        border: 1px solid #3b4261;
+        border-radius: 8px;
+        padding: 14px;
+        margin-bottom: 10px;
+      }
+      .result-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 8px;
+      }
+      .song-title {
+        color: #7aa2f7;
+        font-weight: 600;
+      }
+      .artist {
+        color: #bb9af7;
+      }
+      .score {
+        color: #9ece6a;
+        font-family: monospace;
+        font-size: 0.85em;
+      }
+      .section-info {
+        color: #565f89;
+        font-size: 0.8em;
+        margin-bottom: 8px;
+      }
+      .lyrics {
+        white-space: pre-wrap;
+        font-size: 0.85em;
+        color: #a9b1d6;
+        line-height: 1.6;
+        border-left: 2px solid #3b4261;
+        padding-left: 12px;
+      }
+      .filename {
+        color: #565f89;
+        font-size: 0.75em;
+        margin-top: 8px;
+        font-family: monospace;
+      }
+      .meta {
+        color: #565f89;
+        font-size: 0.85em;
+        margin-bottom: 15px;
+      }
+      .empty {
+        color: #565f89;
+        text-align: center;
+        padding: 40px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>lrc-match</h1>
+
+    <div class="controls">
+      <div class="field" style="flex: 1">
+        <label>Query</label>
+        <input
+          type="text"
+          id="query"
+          placeholder="songs about letting go and moving on..."
+          autofocus
+        />
+      </div>
+      <div class="field">
+        <label>Collection</label>
+        <select id="collection"></select>
+      </div>
+      <div class="field">
+        <label>Min score</label>
+        <input
+          type="number"
+          id="min-score"
+          value="0.3"
+          min="0"
+          max="1"
+          step="0.05"
+          style="width: 80px"
+        />
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button id="search-btn" onclick="doSearch()">Search</button>
+      </div>
+    </div>
+
+    <div id="results">
+      <div class="empty">Enter a query to search lyrics by meaning</div>
+    </div>
+
+    <script>
+      const API = "http://localhost:8000";
+
+      // Load collections on page load
+      async function loadCollections() {
+        try {
+          const res = await fetch(`${API}/api/collections`);
+          const data = await res.json();
+          const select = document.getElementById("collection");
+          select.innerHTML = data
+            .filter((c) => c.points_count > 0)
+            .map((c) => `<option value="${c.name}">${c.name} (${c.points_count})</option>`)
+            .join("");
+        } catch (e) {
+          document.getElementById("results").innerHTML =
+            '<div class="empty">Cannot connect to API at ' + API + "</div>";
+        }
+      }
+
+      async function doSearch() {
+        const query = document.getElementById("query").value.trim();
+        const collection = document.getElementById("collection").value;
+        const minScore = parseFloat(document.getElementById("min-score").value);
+        const btn = document.getElementById("search-btn");
+        const resultsDiv = document.getElementById("results");
+
+        if (!query) return;
+
+        btn.disabled = true;
+        btn.textContent = "Searching...";
+        resultsDiv.innerHTML = '<div class="empty">Searching...</div>';
+
+        try {
+          const res = await fetch(`${API}/api/search`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query, collection, limit: 50 }),
+          });
+          const data = await res.json();
+
+          const filtered = data.results.filter((r) => r.score >= minScore);
+
+          if (filtered.length === 0) {
+            resultsDiv.innerHTML = `<div class="meta">No results for "${query}" above ${minScore}</div>`;
+            return;
+          }
+
+          let html = `<div class="meta">${filtered.length} results for "${query}" in ${collection} (score >= ${minScore})</div>`;
+
+          for (const r of filtered) {
+            const lyricsEscaped = r.lyrics
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;");
+            html += `
+              <div class="result">
+                <div class="result-header">
+                  <span><span class="song-title">${r.title}</span> — <span class="artist">${r.artist}</span></span>
+                  <span class="score">${r.score.toFixed(4)}</span>
+                </div>
+                <div class="section-info">${r.section} (part ${r.position + 1}/${r.total_sections})</div>
+                <div class="lyrics">${lyricsEscaped}</div>
+                <div class="filename">${r.filename}</div>
+              </div>`;
+          }
+
+          resultsDiv.innerHTML = html;
+        } catch (e) {
+          resultsDiv.innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Search";
+        }
+      }
+
+      // Search on Enter key
+      document.getElementById("query").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") doSearch();
+      });
+
+      loadCollections();
+    </script>
+  </body>
+</html>

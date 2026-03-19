@@ -15,7 +15,7 @@ from lrc_match.embedders.base import EmbeddingProvider
 router = APIRouter(prefix="/api")
 
 # Hardcoded until Jellyfin API integration (PRD-04/05)
-MUSIC_DIR = Path("/data/media/music/english")
+MUSIC_DIR = Path("/home/mk/mnt/homelab-data/media/music/english")
 
 
 class IngestRequest(BaseModel):
@@ -70,6 +70,12 @@ def run_ingest(  # noqa: PLR0913
     source_dir = data_dir or MUSIC_DIR
     gap_threshold = gap_threshold_sec if gap_threshold_sec is not None else settings.chunking.gap_threshold_sec
 
+    print(
+        f"Ingest: collection={collection}, provider={embedder.provider_name}, "
+        f"model={embedder.model_name} ({embedder.dimensions}d), "
+        f"gap={gap_threshold}s, min_lines={min_chunk_lines}, force={force}, source={source_dir}"
+    )
+
     # Check if collection exists and has data
     existing_collections = [c.name for c in qdrant.get_collections().collections]
     if collection in existing_collections and not force:
@@ -91,7 +97,7 @@ def run_ingest(  # noqa: PLR0913
     skipped = 0
     files_processed = 0
 
-    for lrc_file in sorted(source_dir.glob("*.lrc")):
+    for lrc_file in sorted(source_dir.rglob("*.lrc")):
         lyric = chunk_song(lrc_file, gap_threshold_sec=gap_threshold)
         if not lyric or not lyric.chunks:
             skipped += 1

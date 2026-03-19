@@ -3,9 +3,12 @@
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from qdrant_client import QdrantClient
 
 from lrc_match.config import Settings, load_settings
@@ -58,12 +61,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
 
+    # CORS — allow static UI and Jellyfin plugin to call the API
+    if settings.server.debug:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
     # Register routes
     app.include_router(health_router)
     app.include_router(search_router)
     app.include_router(ingest_router)
     app.include_router(config_router)
     app.include_router(collections_router)
+
+    # Serve static UI files (if ui/ directory exists)
+    ui_dir = Path(__file__).resolve().parent.parent.parent / "ui"
+    if ui_dir.is_dir():
+        app.mount("/ui", StaticFiles(directory=ui_dir, html=True), name="ui")
 
     return app
 

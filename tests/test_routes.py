@@ -44,6 +44,7 @@ class TestSearchRoute:
             "position": 1,
             "total_sections": 4,
             "lyrics": "Lights will guide you home\nAnd ignite your bones",
+            "filename": "05 - Coldplay - Fix You.lrc",
         }
         mock_qdrant.query_points.return_value = MagicMock(points=[mock_point])
 
@@ -79,6 +80,7 @@ class TestSearchRoute:
             "position": 0,
             "total_sections": 4,
             "lyrics": "When you try your best",
+            "filename": "05 - Coldplay - Fix You.lrc",
         }
         point2 = MagicMock()
         point2.score = 0.95
@@ -89,6 +91,7 @@ class TestSearchRoute:
             "position": 1,
             "total_sections": 4,
             "lyrics": "Lights will guide you home",
+            "filename": "05 - Coldplay - Fix You.lrc",
         }
         mock_qdrant.query_points.return_value = MagicMock(points=[point1, point2])
 
