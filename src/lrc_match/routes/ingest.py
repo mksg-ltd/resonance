@@ -31,6 +31,9 @@ class IngestResponse(BaseModel):
     chunks_created: int
     collection: str
     skipped: int
+    model_mismatch: bool = False
+    stored_model: str | None = None
+    active_model: str | None = None
 
 
 @dataclass
@@ -40,6 +43,8 @@ class IngestResult:
     files_processed: int
     chunks_created: int
     skipped: int
+    model_mismatch: bool = False
+    stored_model: str | None = None
 
 
 def run_ingest(
@@ -64,7 +69,16 @@ def run_ingest(
     if collection in existing_collections and not force:
         info = qdrant.get_collection(collection)
         if info.points_count and info.points_count > 0:
-            return IngestResult(files_processed=0, chunks_created=0, skipped=0)
+            # Check for model mismatch — warn if active embedder differs from stored
+            stored_model = _get_stored_model(qdrant, collection)
+            mismatch = stored_model is not None and stored_model != embedder.model_name
+            return IngestResult(
+                files_processed=0,
+                chunks_created=0,
+                skipped=0,
+                model_mismatch=mismatch,
+                stored_model=stored_model,
+            )
 
     # Parse and chunk all LRC files
     chunks_to_embed = []
@@ -139,6 +153,17 @@ def run_ingest(
     return IngestResult(files_processed=files_processed, chunks_created=len(chunks_to_embed), skipped=skipped)
 
 
+def _get_stored_model(qdrant: QdrantClient, collection: str) -> str | None:
+    """Read the model name from collection metadata point (id=0)."""
+    try:
+        points = qdrant.retrieve(collection_name=collection, ids=[0])
+        if points and points[0].payload and points[0].payload.get("_metadata"):
+            return points[0].payload.get("model")
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
 def _store_collection_metadata(qdrant: QdrantClient, collection: str, embedder: EmbeddingProvider) -> None:
     """Store provider/model/dimensions as a metadata point in the collection."""
     zero_vector = [0.0] * embedder.dimensions
@@ -174,4 +199,7 @@ def ingest(body: IngestRequest, request: Request) -> IngestResponse:
         chunks_created=result.chunks_created,
         collection=request.app.state.settings.qdrant.collection,
         skipped=result.skipped,
+        model_mismatch=result.model_mismatch,
+        stored_model=result.stored_model,
+        active_model=request.app.state.embedder.model_name if result.model_mismatch else None,
     )

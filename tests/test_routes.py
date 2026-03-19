@@ -110,11 +110,37 @@ class TestIngestRoute:
         mock_qdrant.get_collections.return_value = MagicMock(collections=[mock_collection])
         mock_qdrant.get_collection.return_value = MagicMock(points_count=100)
 
+        # Mock metadata point for model mismatch check
+        meta_point = MagicMock()
+        meta_point.payload = {"_metadata": True, "model": "text-embedding-3-small"}
+        mock_qdrant.retrieve.return_value = [meta_point]
+
         response = client.post("/api/ingest", json={"force": False})
         assert response.status_code == 200
         data = response.json()
         assert data["files_processed"] == 0
         assert data["chunks_created"] == 0
+        assert data["model_mismatch"] is False
+
+    def test_ingest_warns_on_model_mismatch(self):
+        client, mock_qdrant, mock_embedder = _make_test_client()
+
+        mock_collection = MagicMock()
+        mock_collection.name = "test_lyrics"
+        mock_qdrant.get_collections.return_value = MagicMock(collections=[mock_collection])
+        mock_qdrant.get_collection.return_value = MagicMock(points_count=100)
+
+        # Stored model differs from active embedder
+        meta_point = MagicMock()
+        meta_point.payload = {"_metadata": True, "model": "text-embedding-3-large"}
+        mock_qdrant.retrieve.return_value = [meta_point]
+
+        response = client.post("/api/ingest", json={"force": False})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["model_mismatch"] is True
+        assert data["stored_model"] == "text-embedding-3-large"
+        assert data["active_model"] == "text-embedding-3-small"
 
     def test_ingest_processes_lrc_files(self, tmp_path):
         client, mock_qdrant, mock_embedder = _make_test_client()
