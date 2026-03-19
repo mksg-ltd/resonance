@@ -1,0 +1,25 @@
+# lrc-match configuration
+# Copy to config.yaml and adjust as needed.
+# Environment variables override all values (prefix: LRC_MATCH__).
+# Example: LRC_MATCH__QDRANT__URL=http://qdrant:6333
+
+embedding:
+  provider: openai # openai | ollama
+
+qdrant:
+  url: http://localhost:6333
+  collection: lyrics
+  # api_key: null  # for Qdrant Cloud
+
+chunking:
+  gap_threshold_sec: 10.0
+  min_chunk_lines: 2
+
+# jellyfin:
+#   url: http://localhost:8096
+#   api_key: your-jellyfin-api-key
+
+server:
+  host: 0.0.0.0
+  port: 8000
+  debug: false # enables Swagger UI at /docs
