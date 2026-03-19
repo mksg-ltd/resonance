@@ -11,4 +11,4 @@ type: user
 - Comfortable with Python, Docker, CLI tools (uses fd, uv)
 - Fedora Linux user with zsh
 - No React/Vue experience — only Django for web dev
-- Plans to open-source lrc-match for the Jellyfin community
+- Plans to open-source resonance for the Jellyfin community

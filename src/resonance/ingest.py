@@ -4,8 +4,8 @@ Ingest LRC lyrics into Qdrant.
 Pipeline: parse LRC files → chunk into sections → embed → store in Qdrant
 
 Usage:
-    python -m lrc_match.ingest
-    python -m lrc_match.ingest --gap 10
+    python -m resonance.ingest
+    python -m resonance.ingest --gap 10
 """
 
 from argparse import ArgumentParser

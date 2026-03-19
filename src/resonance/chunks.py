@@ -2,8 +2,8 @@
 Visualize how a song gets chunked.
 
 Usage:
-    uv run lrc-chunks "path/to/song.lrc"
-    uv run lrc-chunks "path/to/song.lrc" --gap 8.0
+    uv run resonance-chunks "path/to/song.lrc"
+    uv run resonance-chunks "path/to/song.lrc" --gap 8.0
 """
 
 from argparse import ArgumentParser

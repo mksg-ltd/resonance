@@ -2,7 +2,7 @@
 
 import os
 
-from lrc_match.config import (
+from resonance.config import (
     OllamaProviderConfig,
     OpenAIProviderConfig,
     Settings,
@@ -77,7 +77,7 @@ qdrant:
 
 class TestEnvVarOverride:
     def test_env_var_overrides_yaml(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("LRC_MATCH__QDRANT__URL", "http://env-qdrant:6333")
+        monkeypatch.setenv("RESONANCE__QDRANT__URL", "http://env-qdrant:6333")
         config_file = tmp_path / "config.yaml"
         config_file.write_text("""
 qdrant:
@@ -87,7 +87,7 @@ qdrant:
         assert settings.qdrant.url == "http://env-qdrant:6333"
 
     def test_env_var_overrides_default(self, monkeypatch):
-        monkeypatch.setenv("LRC_MATCH__SERVER__PORT", "9000")
+        monkeypatch.setenv("RESONANCE__SERVER__PORT", "9000")
         settings = Settings()
         assert settings.server.port == 9000
 
@@ -138,7 +138,7 @@ class TestConfigDiscovery:
 embedding:
   provider: ollama
 """)
-        monkeypatch.setenv("LRC_MATCH_CONFIG", str(config_file))
+        monkeypatch.setenv("RESONANCE_CONFIG", str(config_file))
         monkeypatch.chdir(tmp_path)
         settings = load_settings()
         assert settings.embedding.provider == "ollama"
@@ -150,7 +150,7 @@ server:
   port: 9999
 """)
         monkeypatch.chdir(tmp_path)
-        # Clear any LRC_MATCH_CONFIG env var
-        monkeypatch.delenv("LRC_MATCH_CONFIG", raising=False)
+        # Clear any RESONANCE_CONFIG env var
+        monkeypatch.delenv("RESONANCE_CONFIG", raising=False)
         settings = load_settings()
         assert settings.server.port == 9999

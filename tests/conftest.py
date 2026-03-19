@@ -5,8 +5,8 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from lrc_match.app import create_app
-from lrc_match.config import Settings
+from resonance.app import create_app
+from resonance.config import Settings
 
 
 @pytest.fixture

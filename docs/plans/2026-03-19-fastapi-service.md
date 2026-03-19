@@ -18,7 +18,7 @@ PRD: docs/prds/06-fastapi-service.md
 
 ## Summary
 
-**Goal:** Restructure lrc-match from CLI-only scripts into a FastAPI service with YAML-driven config (pydantic-settings), embedding provider abstraction, and API endpoints for search, ingestion, config, and health.
+**Goal:** Restructure resonance from CLI-only scripts into a FastAPI service with YAML-driven config (pydantic-settings), embedding provider abstraction, and API endpoints for search, ingestion, config, and health.
 
 **Architecture:** API-first design — FastAPI serves all functionality. Swagger UI is the dev interface. Jellyfin plugin, CLI, and any future frontend are all API clients. Config is YAML-first with env var overrides. Provider-specific settings live in `conf.d/` files.
 
@@ -59,11 +59,11 @@ PRD: docs/prds/06-fastapi-service.md
 - **Patterns to follow:** Passage project's pre-commit, Makefile, pyproject.toml tooling config. Adapted for FastAPI (no Django-specific hooks like djlint).
 - **Conventions:** 120 char lines, double quotes, type hints on all functions, conventional commits. No services layer — route handlers contain business logic directly. Package splits (e.g., `embedders/`, `routes/`) use `__init__.py` re-exports.
 - **Key files to read first:**
-  - `src/lrc_match/ingest.py` — current ingestion pipeline, OpenAI + Qdrant usage, hardcoded values
-  - `src/lrc_match/search.py` — current search, same hardcoded patterns
-  - `src/lrc_match/models.py` — domain models (LrcLine, LrcChunk, LrcLyric)
-  - `src/lrc_match/chunker.py` — chunking strategies (tag-based and gap-based)
-  - `src/lrc_match/parser.py` — LRC file parsing
+  - `src/resonance/ingest.py` — current ingestion pipeline, OpenAI + Qdrant usage, hardcoded values
+  - `src/resonance/search.py` — current search, same hardcoded patterns
+  - `src/resonance/models.py` — domain models (LrcLine, LrcChunk, LrcLyric)
+  - `src/resonance/chunker.py` — chunking strategies (tag-based and gap-based)
+  - `src/resonance/parser.py` — LRC file parsing
 - **Gotchas:**
   - Current code uses `OPEN_AI_KEY` env var (not `OPENAI_API_KEY`) — normalize during refactor
   - Current `DATA_DIR = Path("data")` is hardcoded — will become `/data/media/music/english`
@@ -76,11 +76,11 @@ PRD: docs/prds/06-fastapi-service.md
 
 | Old File                   | Functions/Classes                                                                                         | Mapped to Task                                      |
 | -------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| `src/lrc_match/ingest.py`  | `embed_texts()`, `setup_collection()`, `main()`, `MODELS` dict, `DATA_DIR`, OpenAI/Qdrant client creation | Task 3 (embedder extraction), Task 5 (ingest route) |
-| `src/lrc_match/search.py`  | `search()`, `main()`, `MODELS` dict, OpenAI/Qdrant client creation                                        | Task 3 (embedder extraction), Task 5 (search route) |
-| `src/lrc_match/models.py`  | `LrcLine`, `LrcChunk`, `LrcLyric`                                                                         | Unchanged — no task needed                          |
-| `src/lrc_match/parser.py`  | `parse_lrc_lines()`, `TIMESTAMP_RE`                                                                       | Unchanged — no task needed                          |
-| `src/lrc_match/chunker.py` | `chunk_song()`, `chunk_by_tags()`, `chunk_by_gaps()`, `has_section_tags()`                                | Unchanged — no task needed                          |
+| `src/resonance/ingest.py`  | `embed_texts()`, `setup_collection()`, `main()`, `MODELS` dict, `DATA_DIR`, OpenAI/Qdrant client creation | Task 3 (embedder extraction), Task 5 (ingest route) |
+| `src/resonance/search.py`  | `search()`, `main()`, `MODELS` dict, OpenAI/Qdrant client creation                                        | Task 3 (embedder extraction), Task 5 (search route) |
+| `src/resonance/models.py`  | `LrcLine`, `LrcChunk`, `LrcLyric`                                                                         | Unchanged — no task needed                          |
+| `src/resonance/parser.py`  | `parse_lrc_lines()`, `TIMESTAMP_RE`                                                                       | Unchanged — no task needed                          |
+| `src/resonance/chunker.py` | `chunk_song()`, `chunk_by_tags()`, `chunk_by_gaps()`, `has_section_tags()`                                | Unchanged — no task needed                          |
 
 ### Feature Mapping Verification
 
@@ -128,7 +128,7 @@ PRD: docs/prds/06-fastapi-service.md
 - Add FastAPI dependencies to pyproject.toml: `fastapi`, `uvicorn[standard]`, `pydantic-settings`, `pyyaml`. Add dev deps: `ruff`, `ty`, `pytest`, `httpx` (for FastAPI test client), `pre-commit`.
 - Remove `python-dotenv` dependency (replaced by pydantic-settings env loading).
 - Keep `openai` and `qdrant-client` deps.
-- Update `[project.scripts]` to add `lrc-server = "lrc_match.app:cli"` alongside existing CLI scripts.
+- Update `[project.scripts]` to add `resonance-server = "resonance.app:cli"` alongside existing CLI scripts.
 - The `.venv` lives at project root (not in `src/` like passage) since there's no separate `src/` package dir issue.
 - ty hook: `entry: bash -c 'uv run ty check src/'` (adjust path since .venv at root).
 - Ruff files filter: `files: ^src/.*\.py$` to match existing structure.
@@ -158,7 +158,7 @@ PRD: docs/prds/06-fastapi-service.md
 
 **Files:**
 
-- Create: `src/lrc_match/config.py`
+- Create: `src/resonance/config.py`
 - Create: `config.yaml.example`
 - Create: `conf.d/openai.yaml.example`
 - Create: `conf.d/ollama.yaml.example`
@@ -168,19 +168,19 @@ PRD: docs/prds/06-fastapi-service.md
 
 - pydantic-settings does NOT natively support `conf.d/` directory loading. Keep it simple: the main `Settings` class loads `config.yaml`. A separate `load_provider_config()` function reads `conf.d/{provider}.yaml` if it exists, returning a provider-specific pydantic model. This is minimal glue, not a framework.
 - Config hierarchy: code defaults → config.yaml → env vars. No CLI flags (config is for the service, CLI tools use argparse for their own args).
-- Env var pattern: `LRC_MATCH__QDRANT__URL` overrides `qdrant.url` (using `env_nested_delimiter="__"` and `env_prefix="LRC_MATCH__"`).
+- Env var pattern: `RESONANCE__QDRANT__URL` overrides `qdrant.url` (using `env_nested_delimiter="__"` and `env_prefix="RESONANCE__"`).
 - Config sections: `embedding` (just `provider` field), `qdrant` (url, collection, api_key), `chunking` (gap_threshold_sec, min_chunk_lines), `jellyfin` (url, api_key — both optional/null), `server` (host, port, debug).
 - Provider configs: `OpenAIProviderConfig` (api_key, model), `OllamaProviderConfig` (base_url, model). Loaded from `conf.d/openai.yaml` or `conf.d/ollama.yaml` based on `embedding.provider`.
 - `api_key` fields use `SecretStr` for redaction in logs/API responses.
 - YAML loading: use `pyyaml` to load the file, then pass the dict to Settings. pydantic-settings-yaml exists but adds a dependency for minimal gain — just `yaml.safe_load()` + `Settings(**data)`.
-- Config file discovery: check `./config.yaml` first, then `~/.config/lrc-match/config.yaml`. Env var `LRC_MATCH_CONFIG` to override path.
+- Config file discovery: check `./config.yaml` first, then `~/.config/resonance/config.yaml`. Env var `RESONANCE_CONFIG` to override path.
 - Env var expansion in YAML values (e.g., `api_key: ${OPENAI_API_KEY}`) — use `os.path.expandvars()` on string values before passing to pydantic. Simple, no custom parser.
 - Test with tmp_path fixtures: write YAML to temp file, load config, verify values. Test env var override. Test missing config file uses defaults. Test provider config loading.
 
 **Definition of Done:**
 
 - [ ] `Settings` loads from YAML file with all sections validated
-- [ ] Env vars override YAML values (e.g., `LRC_MATCH__QDRANT__URL`)
+- [ ] Env vars override YAML values (e.g., `RESONANCE__QDRANT__URL`)
 - [ ] Provider config loads from `conf.d/{provider}.yaml`
 - [ ] Missing config file falls back to code defaults
 - [ ] `config.yaml.example` documents all options with comments
@@ -200,10 +200,10 @@ PRD: docs/prds/06-fastapi-service.md
 
 **Files:**
 
-- Create: `src/lrc_match/embedders/__init__.py`
-- Create: `src/lrc_match/embedders/base.py`
-- Create: `src/lrc_match/embedders/openai.py`
-- Create: `src/lrc_match/embedders/ollama.py`
+- Create: `src/resonance/embedders/__init__.py`
+- Create: `src/resonance/embedders/base.py`
+- Create: `src/resonance/embedders/openai.py`
+- Create: `src/resonance/embedders/ollama.py`
 - Create: `tests/test_embedders.py`
 
 **Key Decisions / Notes:**
@@ -237,9 +237,9 @@ PRD: docs/prds/06-fastapi-service.md
 
 **Files:**
 
-- Create: `src/lrc_match/app.py`
-- Create: `src/lrc_match/routes/__init__.py`
-- Create: `src/lrc_match/routes/health.py`
+- Create: `src/resonance/app.py`
+- Create: `src/resonance/routes/__init__.py`
+- Create: `src/resonance/routes/health.py`
 - Create: `tests/test_health.py`
 - Create: `tests/conftest.py`
 
@@ -250,7 +250,7 @@ PRD: docs/prds/06-fastapi-service.md
 - Swagger UI: enabled when `settings.server.debug` is True. Use `docs_url="/docs"` when debug, `docs_url=None` when not.
 - Health endpoint at `GET /health`: checks Qdrant connectivity (`qdrant_client.get_collections()`), returns `{"status": "healthy", "qdrant": "connected", "provider": "openai"}` or appropriate error.
 - `conftest.py`: shared fixtures. `test_settings` fixture returns Settings with test defaults. `test_app` fixture creates app with test settings. `test_client` fixture returns `httpx.AsyncClient` (or `TestClient` from FastAPI).
-- CLI entry point: `def cli()` in `app.py` that calls `uvicorn.run()` with settings from config. This is what `lrc-server` script points to.
+- CLI entry point: `def cli()` in `app.py` that calls `uvicorn.run()` with settings from config. This is what `resonance-server` script points to.
 - All routes mounted under `/api/` prefix via APIRouter, except `/health` which is at root.
 
 **Definition of Done:**
@@ -278,13 +278,13 @@ PRD: docs/prds/06-fastapi-service.md
 
 **Files:**
 
-- Create: `src/lrc_match/routes/search.py`
-- Create: `src/lrc_match/routes/ingest.py`
-- Create: `src/lrc_match/routes/config.py`
-- Create: `src/lrc_match/routes/collections.py`
-- Modify: `src/lrc_match/routes/__init__.py` (register all routers)
-- Modify: `src/lrc_match/ingest.py` (refactor to use embedder + config, keep CLI)
-- Modify: `src/lrc_match/search.py` (refactor to use embedder + config, keep CLI)
+- Create: `src/resonance/routes/search.py`
+- Create: `src/resonance/routes/ingest.py`
+- Create: `src/resonance/routes/config.py`
+- Create: `src/resonance/routes/collections.py`
+- Modify: `src/resonance/routes/__init__.py` (register all routers)
+- Modify: `src/resonance/ingest.py` (refactor to use embedder + config, keep CLI)
+- Modify: `src/resonance/search.py` (refactor to use embedder + config, keep CLI)
 - Create: `tests/test_routes.py`
 
 **Key Decisions / Notes:**
@@ -333,7 +333,7 @@ PRD: docs/prds/06-fastapi-service.md
 - [ ] `GET /api/config` returns config with secrets redacted
 - [ ] `GET /api/collections` lists collections with metadata
 - [ ] `DELETE /api/collections/{name}` drops a collection
-- [ ] Existing CLI tools (`lrc-ingest`, `lrc-search`) still work using the new config/embedder layer
+- [ ] Existing CLI tools (`resonance-ingest`, `resonance-search`) still work using the new config/embedder layer
 - [ ] All route tests pass
 
 **Verify:**
@@ -345,7 +345,7 @@ PRD: docs/prds/06-fastapi-service.md
 
 ### Task 6: Docker Multi-Stage Build + Updated Compose
 
-**Objective:** Create a multi-stage Dockerfile for the FastAPI service and update docker-compose.yml to run lrc-match alongside Qdrant.
+**Objective:** Create a multi-stage Dockerfile for the FastAPI service and update docker-compose.yml to run resonance alongside Qdrant.
 
 **Dependencies:** Task 4, Task 5
 
@@ -360,29 +360,29 @@ PRD: docs/prds/06-fastapi-service.md
 - **Dockerfile** (multi-stage, adapted from passage):
   - Stage 1 (builder): Python 3.14 slim, copy uv binary, `uv sync --no-dev --frozen`.
   - Stage 2 (runtime): Python 3.14 slim, copy venv from builder, copy src/. Non-root user.
-  - Entrypoint: `uvicorn lrc_match.app:create_app --factory --host 0.0.0.0 --port 8000`.
+  - Entrypoint: `uvicorn resonance.app:create_app --factory --host 0.0.0.0 --port 8000`.
   - No Node.js stage needed (no frontend build).
 
 - **docker-compose.yml:**
-  - Add `lrc-match` service alongside existing `qdrant` service.
+  - Add `resonance` service alongside existing `qdrant` service.
   - Volume mount for `config.yaml` and `conf.d/` directory.
   - Volume mount for music library (default: `/data/media/music/english`).
   - Depends on qdrant.
   - Health check: `curl -f http://localhost:8000/health`.
-  - Environment: `LRC_MATCH__SERVER__DEBUG=true` for dev.
+  - Environment: `RESONANCE__SERVER__DEBUG=true` for dev.
 
 - **.dockerignore:** `.venv`, `__pycache__`, `.git`, `qdrant_storage`, `data/`, `.pytest_cache`, `htmlcov`, `*.pyc`.
 
 **Definition of Done:**
 
 - [ ] `docker build` succeeds
-- [ ] `docker compose up` starts both Qdrant and lrc-match
+- [ ] `docker compose up` starts both Qdrant and resonance
 - [ ] Health check passes in compose
 - [ ] Config and music directory are properly mounted
 
 **Verify:**
 
-- `docker build -t lrc-match:dev .`
+- `docker build -t resonance:dev .`
 - `docker compose up -d && sleep 5 && curl http://localhost:8000/health && docker compose down`
 
 ## Testing Strategy

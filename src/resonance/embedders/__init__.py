@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from lrc_match.config import Settings, load_provider_config
+from resonance.config import Settings, load_provider_config
 
 from .base import EmbeddingProvider
 from .ollama import OllamaEmbedder

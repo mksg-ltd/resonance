@@ -2,8 +2,8 @@
 Search lyrics in Qdrant by semantic similarity.
 
 Usage:
-    python -m lrc_match.search "your query here"
-    python -m lrc_match.search "your query" --artist "Coldplay"
+    python -m resonance.search "your query here"
+    python -m resonance.search "your query" --artist "Coldplay"
 """
 
 from argparse import ArgumentParser

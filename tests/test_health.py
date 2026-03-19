@@ -25,8 +25,8 @@ class TestSwaggerUI:
         assert response.status_code == 200
 
     def test_docs_disabled_when_not_debug(self):
-        from lrc_match.app import create_app
-        from lrc_match.config import Settings
+        from resonance.app import create_app
+        from resonance.config import Settings
 
         settings = Settings(server={"debug": False})
         app = create_app(settings=settings)

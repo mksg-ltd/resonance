@@ -1,4 +1,4 @@
-# lrc-match
+# resonance
 
 Semantic search for your music library. Describe a mood, theme, or feeling — get matching songs back, ranked by lyric similarity.
 
@@ -28,8 +28,8 @@ Ask for "songs about letting go and moving on" and get results ranked by semanti
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/youruser/lrc-match.git
-cd lrc-match
+git clone https://github.com/youruser/resonance.git
+cd resonance
 
 # Copy example configs
 cp config/config.yaml.example config/config.yml
@@ -47,7 +47,7 @@ docker compose up -d
 This starts:
 
 - **Qdrant** — vector database on port 6333
-- **lrc-match** — API service on port 8000
+- **resonance** — API service on port 8000
 
 ### 3. Ingest your lyrics
 
@@ -119,9 +119,9 @@ model: nomic-embed-text # or mxbai-embed-large
 Any config value can be overridden with environment variables:
 
 ```bash
-LRC_MATCH__QDRANT__URL=http://qdrant:6333
-LRC_MATCH__SERVER__DEBUG=true
-LRC_MATCH__EMBEDDING__PROVIDER=ollama
+RESONANCE__QDRANT__URL=http://qdrant:6333
+RESONANCE__SERVER__DEBUG=true
+RESONANCE__EMBEDDING__PROVIDER=ollama
 ```
 
 ## Fully self-hosted setup
@@ -151,7 +151,7 @@ services:
     # Pull the model: docker exec ollama ollama pull nomic-embed-text
 ```
 
-Stack: Jellyfin + Qdrant + Ollama + lrc-match. Zero cloud dependencies.
+Stack: Jellyfin + Qdrant + Ollama + resonance. Zero cloud dependencies.
 
 ## API endpoints
 
@@ -166,11 +166,11 @@ Stack: Jellyfin + Qdrant + Ollama + lrc-match. Zero cloud dependencies.
 
 ## Docker Compose
 
-The default `docker-compose.yml` runs lrc-match alongside Qdrant. Mount your music library and config:
+The default `docker-compose.yml` runs resonance alongside Qdrant. Mount your music library and config:
 
 ```yaml
 services:
-  lrc-match:
+  resonance:
     build: .
     ports:
       - "8000:8000"
@@ -178,7 +178,7 @@ services:
       - ./config:/app/config:ro
       - /path/to/your/music:/data/media/music/english:ro
     environment:
-      - LRC_MATCH__QDRANT__URL=http://qdrant:6333
+      - RESONANCE__QDRANT__URL=http://qdrant:6333
     depends_on:
       - qdrant
 ```
@@ -189,10 +189,10 @@ For local development or scripting:
 
 ```bash
 # Search
-uv run lrc-search "songs about hope" --artist "Coldplay" --limit 10
+uv run resonance-search "songs about hope" --artist "Coldplay" --limit 10
 
 # Ingest
-uv run lrc-ingest --gap 8.0 --data-dir ./my-lyrics/
+uv run resonance-ingest --gap 8.0 --data-dir ./my-lyrics/
 ```
 
 ## Development

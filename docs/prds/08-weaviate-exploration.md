@@ -21,7 +21,7 @@ Study Weaviate as an alternative/complementary vector database to Qdrant, with f
 
 - Understand Weaviate's architecture and how it differs from Qdrant
 - Deep dive into the vectorizer module system ("DB owns the embedding")
-- Evaluate if Weaviate's approach has advantages for lrc-match
+- Evaluate if Weaviate's approach has advantages for resonance
 - Hands-on: replicate the lyrics search with Weaviate for comparison
 
 ## Non-Goals
@@ -52,6 +52,7 @@ concern, configured at the DB level, not the app level.
 ### Why this distinction matters — systems thinking
 
 **Coupling and cohesion:**
+
 - Qdrant approach: embedding logic is coupled to your application. If you have 5 services
   ingesting data, each needs to know about OpenAI, handle API keys, manage batching. But you
   have full control — different services can use different models, preprocess text differently.
@@ -85,7 +86,7 @@ MongoDB or early Elasticsearch. Fast to iterate, easy to evolve, but no compile-
 
 Weaviate uses strict schemas (called "classes") — you define properties and their types
 upfront. Like Postgres tables. More friction to change, but the DB validates your data and
-can optimize storage. You also declare *which properties to vectorize* in the schema, giving
+can optimize storage. You also declare _which properties to vectorize_ in the schema, giving
 fine-grained control over what the embedding model sees.
 
 **Hybrid search — why it matters for lyrics:**
@@ -114,7 +115,7 @@ it's not fused into the vector ranking the way Weaviate does it.
 - [ ] Understand vectorizer module system — how modules hook into the HNSW index pipeline
 - [ ] Study schema design: strict schemas vs Qdrant's schemaless payloads — implications for evolving data models
 - [ ] Evaluate hybrid search (vector + BM25 keyword) — is this useful for lyrics where exact phrases matter?
-- [ ] Understand multi-tenancy model — relevant if lrc-match ever supports multiple users
+- [ ] Understand multi-tenancy model — relevant if resonance ever supports multiple users
 
 ### Phase 2 - Comparative Ingestion
 

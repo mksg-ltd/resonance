@@ -6,7 +6,7 @@ services:
     ports:
       - "6333:6333"
       - "6334:6334"
-  lrc-match:
+  resonance:
     build: .
     ports:
       - "8000:8000"
@@ -14,8 +14,8 @@ services:
       - ./config:/app/config:ro
       - /data/media/music/english:/data/media/music/english:ro
     environment:
-      - LRC_MATCH__SERVER__DEBUG=true
-      - LRC_MATCH__QDRANT__URL=http://qdrant:6333
+      - RESONANCE__SERVER__DEBUG=true
+      - RESONANCE__QDRANT__URL=http://qdrant:6333
     depends_on:
       - qdrant
     healthcheck:

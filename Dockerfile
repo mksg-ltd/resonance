@@ -1,4 +1,4 @@
-# Multi-stage build for lrc-match FastAPI service
+# Multi-stage build for resonance FastAPI service
 
 # --- Builder stage ---
 FROM python:3.14-slim AS builder
@@ -37,4 +37,4 @@ EXPOSE 8000
 
 USER appuser
 
-CMD ["uvicorn", "lrc_match.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "resonance.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

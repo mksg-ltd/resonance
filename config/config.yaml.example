@@ -1,4 +1,4 @@
-# lrc-match configuration
+# resonance configuration
 # Copy to config.yaml and adjust as needed.
 # Environment variables override all values (prefix: LRC_MATCH__).
 # Example: LRC_MATCH__QDRANT__URL=http://qdrant:6333

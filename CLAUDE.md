@@ -1,4 +1,4 @@
-# lrc-match — Claude Code Instructions
+# resonance — Claude Code Instructions
 
 ## Project Overview
 
@@ -21,7 +21,7 @@ API-first design. All functionality exposed as FastAPI endpoints. Three clients 
 
 1. **Jellyfin plugin** (future) — renders UI inside Jellyfin, calls our API
 2. **Swagger UI** — enabled in debug mode, the dev interface
-3. **CLI tools** — `lrc-ingest`, `lrc-search` for command-line use
+3. **CLI tools** — `resonance-ingest`, `resonance-search` for command-line use
 
 Config is YAML-first. Most users configure via `config/config.yml` and never touch a web UI. Provider-specific settings (API keys, model names) live in `config/conf.d/{provider}.yaml`.
 
@@ -54,7 +54,7 @@ Config is YAML-first. Most users configure via `config/config.yml` and never tou
 ## Project Structure
 
 ```
-src/lrc_match/
+src/resonance/
 ├── app.py            # FastAPI application factory
 ├── config.py          # Pydantic settings + YAML loading
 ├── models.py          # Domain models (LrcLine, LrcChunk, LrcLyric)

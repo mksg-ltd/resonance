@@ -8,9 +8,9 @@ from pydantic import BaseModel
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-from lrc_match.chunker import chunk_song
-from lrc_match.config import Settings
-from lrc_match.embedders.base import EmbeddingProvider
+from resonance.chunker import chunk_song
+from resonance.config import Settings
+from resonance.embedders.base import EmbeddingProvider
 
 router = APIRouter(prefix="/api")
 

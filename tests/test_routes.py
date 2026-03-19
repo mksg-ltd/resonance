@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from lrc_match.app import create_app
-from lrc_match.config import Settings
+from resonance.app import create_app
+from resonance.config import Settings
 
 
 def _make_test_client(debug: bool = True) -> tuple[TestClient, MagicMock, MagicMock]:
@@ -161,7 +161,7 @@ class TestIngestRoute:
 
         mock_embedder.embed.return_value = [[0.1] * 1536]
 
-        with patch("lrc_match.routes.ingest.MUSIC_DIR", tmp_path):
+        with patch("resonance.routes.ingest.MUSIC_DIR", tmp_path):
             response = client.post("/api/ingest", json={"force": True})
 
         assert response.status_code == 200

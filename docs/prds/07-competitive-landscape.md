@@ -15,7 +15,7 @@ tags: [research, competition, audiomuse, plex]
 
 ## Overview
 
-Understand existing solutions for AI-powered music discovery and smart playlists to inform lrc-match's positioning and feature set.
+Understand existing solutions for AI-powered music discovery and smart playlists to inform resonance's positioning and feature set.
 
 ## Goals
 
@@ -59,9 +59,10 @@ Understand existing solutions for AI-powered music discovery and smart playlists
 
 ### Our Differentiator
 
-Key question: what can lrc-match do that none of these can?
+Key question: what can resonance do that none of these can?
 
 Hypothesis:
+
 - **Lyrics-semantic search** — no one does this well, most use audio features or listening patterns
 - **Fully self-hosted** — no cloud dependency (Qdrant + Ollama + Jellyfin)
 - **Thematic discovery** — find songs by meaning, not by sound or popularity
@@ -78,7 +79,7 @@ Hypothesis:
 
 ### Phase 2 - Positioning
 
-- [ ] Define lrc-match's unique value proposition based on research
+- [ ] Define resonance's unique value proposition based on research
 - [ ] Identify features worth borrowing vs. areas to differentiate
 - [ ] Update project roadmap based on competitive gaps
 

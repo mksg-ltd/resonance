@@ -15,7 +15,7 @@ tags: [jellyfin, plugin, integration]
 
 ## Overview
 
-Understand Jellyfin's plugin system to evaluate whether lrc-match can integrate directly as a Jellyfin plugin rather than (or in addition to) a standalone web app.
+Understand Jellyfin's plugin system to evaluate whether resonance can integrate directly as a Jellyfin plugin rather than (or in addition to) a standalone web app.
 
 ## Goals
 
@@ -32,12 +32,13 @@ Understand Jellyfin's plugin system to evaluate whether lrc-match can integrate 
 ## Design
 
 Research areas:
+
 1. **Plugin architecture**: how do Jellyfin plugins work? Lifecycle, APIs, UI extension points
 2. **Relevant plugins to study**: existing lyrics plugins, smart collection plugins, recommendation plugins
 3. **API surface**: REST API for library queries, playlist CRUD, user sessions
 4. **Integration patterns**: plugin vs external service vs both (plugin as thin client to external Qdrant service)
 
-**Decision (2026-03-19):** lrc-match is a standalone FastAPI service (PRD-06). The
+**Decision (2026-03-19):** resonance is a standalone FastAPI service (PRD-06). The
 Jellyfin plugin would be a thin UI client that renders inside Jellyfin's web interface
 and calls the FastAPI endpoints over HTTP. The plugin does NOT talk to Qdrant directly.
 

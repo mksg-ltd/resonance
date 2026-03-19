@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     """Application settings loaded from YAML + env vars."""
 
     model_config = SettingsConfigDict(
-        env_prefix="LRC_MATCH__",
+        env_prefix="RESONANCE__",
         env_nested_delimiter="__",
     )
 
@@ -112,7 +112,7 @@ def _find_config_file() -> Path | None:
 
     Checks both .yaml and .yml extensions.
     """
-    env_path = os.environ.get("LRC_MATCH_CONFIG")
+    env_path = os.environ.get("RESONANCE_CONFIG")
     if env_path:
         path = Path(env_path)
         if path.is_file():
@@ -128,7 +128,7 @@ def _find_config_file() -> Path | None:
         if candidate.is_file():
             return candidate
 
-    home = Path.home() / ".config" / "lrc-match" / "config.yaml"
+    home = Path.home() / ".config" / "resonance" / "config.yaml"
     if home.is_file():
         return home
 
@@ -149,7 +149,7 @@ def load_provider_config(
 ) -> OpenAIProviderConfig | OllamaProviderConfig | None:
     """Load provider-specific config from conf.d/{provider}.yaml.
 
-    Searches: explicit config_dir → conf.d/ → config/conf.d/ → ~/.config/lrc-match/conf.d/
+    Searches: explicit config_dir → conf.d/ → config/conf.d/ → ~/.config/resonance/conf.d/
     """
     search_dirs = []
     if config_dir:
@@ -158,7 +158,7 @@ def load_provider_config(
         [
             Path("conf.d"),
             Path("config/conf.d"),
-            Path.home() / ".config" / "lrc-match" / "conf.d",
+            Path.home() / ".config" / "resonance" / "conf.d",
         ]
     )
 

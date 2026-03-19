@@ -2,7 +2,7 @@
 
 from openai import OpenAI
 
-from lrc_match.config import OpenAIProviderConfig
+from resonance.config import OpenAIProviderConfig
 
 KNOWN_DIMENSIONS: dict[str, int] = {
     "text-embedding-3-small": 1536,

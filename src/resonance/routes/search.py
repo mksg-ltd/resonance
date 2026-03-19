@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from qdrant_client import QdrantClient
 from qdrant_client.models import FieldCondition, Filter, MatchValue
 
-from lrc_match.embedders.base import EmbeddingProvider
+from resonance.embedders.base import EmbeddingProvider
 
 router = APIRouter(prefix="/api")
 
@@ -97,7 +97,7 @@ def _get_collection_metadata(qdrant: QdrantClient, collection: str) -> tuple[str
 @router.post("/search", response_model=SearchResponse)
 def search(body: SearchRequest, request: Request) -> SearchResponse:
     """Semantic lyric search. Auto-selects embedder based on collection metadata."""
-    from lrc_match.embedders import get_embedder_for_provider
+    from resonance.embedders import get_embedder_for_provider
 
     settings = request.app.state.settings
     collection = body.collection or settings.qdrant.collection

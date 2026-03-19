@@ -2,7 +2,7 @@
 
 import httpx
 
-from lrc_match.config import OllamaProviderConfig
+from resonance.config import OllamaProviderConfig
 
 KNOWN_DIMENSIONS: dict[str, int] = {
     "nomic-embed-text": 768,

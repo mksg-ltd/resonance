@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 
-from lrc_match.config import OllamaProviderConfig, OpenAIProviderConfig, Settings, load_settings
-from lrc_match.embedders import OpenAIEmbedder, OllamaEmbedder, create_embedder
+from resonance.config import OllamaProviderConfig, OpenAIProviderConfig, Settings, load_settings
+from resonance.embedders import OpenAIEmbedder, OllamaEmbedder, create_embedder
 
 
 class TestOpenAIEmbedder:

@@ -12,7 +12,7 @@ GREEN := \033[0;32m
 RESET := \033[0m
 
 help: ## Show this help message
-	@printf "$(GREEN)lrc-match Development Commands:$(RESET)\n"
+	@printf "$(GREEN)resonance Development Commands:$(RESET)\n"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[0;34m%-15s\033[0m %s\n", $$1, $$2}'
 
 up: ## Start dev dependencies (Qdrant)
@@ -31,8 +31,8 @@ clean: ## Stop services and remove volumes (fresh start)
 	@printf "$(GREEN)Clean state restored$(RESET)\n"
 
 run: up ## Start Qdrant + dev server (Swagger UI at /docs)
-	@printf "$(BLUE)Starting lrc-match at http://localhost:8000/docs$(RESET)\n"
-	uv run lrc-dev
+	@printf "$(BLUE)Starting resonance at http://localhost:8000/docs$(RESET)\n"
+	uv run resonance-dev
 
 test: ## Run pytest
 	@printf "$(BLUE)Running tests...$(RESET)\n"
@@ -54,5 +54,5 @@ install: ## Install dependencies + pre-commit hooks
 
 build: ## Build Docker image locally
 	@printf "$(BLUE)Building Docker image...$(RESET)\n"
-	docker build -t lrc-match:dev .
+	docker build -t resonance:dev .
 	@printf "$(GREEN)Done$(RESET)\n"

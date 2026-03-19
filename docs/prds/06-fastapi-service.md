@@ -15,7 +15,7 @@ tags: [fastapi, configuration, api, embeddings, playlists]
 
 ## Overview
 
-Restructure lrc-match from CLI-only scripts into a FastAPI service with YAML-driven
+Restructure resonance from CLI-only scripts into a FastAPI service with YAML-driven
 configuration, embedding provider abstraction, and API endpoints for search, ingestion,
 and playlist management. This is the foundation everything else builds on — Jellyfin
 plugin (PRD-04), lyrics crawling (PRD-05), and any future frontend all consume these
@@ -23,7 +23,7 @@ endpoints.
 
 ## Goals
 
-- FastAPI application serving all lrc-match functionality as API endpoints
+- FastAPI application serving all resonance functionality as API endpoints
 - YAML config file + pydantic-settings for typed, validated configuration
 - Embedding provider abstraction (OpenAI, Ollama, Sentence Transformers)
 - Swagger UI available in dev mode as the working interface
@@ -49,7 +49,7 @@ endpoints.
                             │ HTTP
                     ┌───────▼───────┐
                     │  FastAPI App  │
-                    │  (lrc-match)  │
+                    │  (resonance)  │
                     └───────┬───────┘
                             │
               ┌─────────────┼─────────────┐
@@ -81,25 +81,25 @@ Main config stays minimal — most users only touch this:
 # config.yaml
 
 embedding:
-  provider: openai            # openai | ollama | sentence-transformers
+  provider: openai # openai | ollama | sentence-transformers
 
 qdrant:
   url: http://localhost:6333
   collection: lyrics
-  api_key: null               # for Qdrant Cloud
+  api_key: null # for Qdrant Cloud
 
 chunking:
   gap_threshold_sec: 10.0
   min_chunk_lines: 2
 
 jellyfin:
-  url: null                   # future: Jellyfin API integration (PRD-04/05)
+  url: null # future: Jellyfin API integration (PRD-04/05)
   api_key: null
 
 server:
   host: 0.0.0.0
   port: 8000
-  debug: false                # enables Swagger UI
+  debug: false # enables Swagger UI
 ```
 
 Provider-specific settings live in separate files under `conf.d/`:
@@ -159,6 +159,7 @@ class EmbeddingProvider(Protocol):
 ```
 
 Implementations:
+
 - `OpenAIEmbedder` — current approach, uses OpenAI API
 - `OllamaEmbedder` — local models via Ollama (nomic-embed-text, mxbai-embed-large)
 - `SentenceTransformerEmbedder` — direct HuggingFace models, no server needed
@@ -198,8 +199,8 @@ is a key differentiator for the project.
 ### Project Structure
 
 ```
-lrc-match/
-├── src/lrc_match/
+resonance/
+├── src/resonance/
 │   ├── __init__.py
 │   ├── app.py               # FastAPI application factory
 │   ├── config.py             # Pydantic settings + YAML loading
@@ -287,7 +288,7 @@ Adopted from reference projects (nool, passage):
 ### Phase 5 — Docker & Deployment
 
 - [ ] Multi-stage Dockerfile
-- [ ] Update docker-compose.yml (add lrc-match service alongside Qdrant)
+- [ ] Update docker-compose.yml (add resonance service alongside Qdrant)
 - [ ] config.yaml volume mount
 - [ ] Health check in compose
 
