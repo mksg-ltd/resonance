@@ -83,15 +83,15 @@ def run_search(  # noqa: PLR0913
     return sorted(seen.values(), key=lambda r: r.score, reverse=True)[:limit]
 
 
-def _get_collection_provider(qdrant: QdrantClient, collection: str) -> str | None:
-    """Read the provider from collection metadata (point id=0)."""
+def _get_collection_metadata(qdrant: QdrantClient, collection: str) -> tuple[str | None, str | None]:
+    """Read provider and model from collection metadata (point id=0)."""
     try:
         points = qdrant.retrieve(collection_name=collection, ids=[0])
         if points and points[0].payload and points[0].payload.get("_metadata"):
-            return points[0].payload.get("provider")
+            return points[0].payload.get("provider"), points[0].payload.get("model")
     except Exception:  # noqa: BLE001
         pass
-    return None
+    return None, None
 
 
 @router.post("/search", response_model=SearchResponse)
@@ -104,8 +104,12 @@ def search(body: SearchRequest, request: Request) -> SearchResponse:
     qdrant = request.app.state.qdrant
 
     # Pick the right embedder for this collection
-    stored_provider = _get_collection_provider(qdrant, collection)
-    embedder = get_embedder_for_provider(stored_provider) if stored_provider else request.app.state.embedder
+    stored_provider, stored_model = _get_collection_metadata(qdrant, collection)
+    embedder = (
+        get_embedder_for_provider(stored_provider, model=stored_model)
+        if stored_provider
+        else request.app.state.embedder
+    )
 
     results = run_search(
         qdrant=qdrant,

@@ -46,9 +46,11 @@ def create_embedder(settings: Settings, config_dir: Path | None = None) -> Embed
 _embedder_cache: dict[str, EmbeddingProvider] = {}
 
 
-def get_embedder_for_provider(provider: str, config_dir: Path | None = None) -> EmbeddingProvider:
-    """Get or create an embedder for a specific provider. Cached."""
-    cache_key = provider
+def get_embedder_for_provider(
+    provider: str, *, model: str | None = None, config_dir: Path | None = None
+) -> EmbeddingProvider:
+    """Get or create an embedder for a specific provider+model. Cached."""
+    cache_key = f"{provider}:{model}" if model else provider
     if cache_key in _embedder_cache:
         return _embedder_cache[cache_key]
 
@@ -57,11 +59,15 @@ def get_embedder_for_provider(provider: str, config_dir: Path | None = None) -> 
         if provider_config is None:
             msg = "Cannot create OpenAI embedder — no conf.d/openai.yaml found"
             raise ValueError(msg)
+        if model:
+            provider_config = provider_config.model_copy(update={"model": model})
         embedder = OpenAIEmbedder(provider_config)
     elif provider == "ollama":
         if provider_config is None:
             msg = "Cannot create Ollama embedder — no conf.d/ollama.yaml found"
             raise ValueError(msg)
+        if model:
+            provider_config = provider_config.model_copy(update={"model": model})
         embedder = OllamaEmbedder(provider_config)
     else:
         msg = f"Unknown provider: {provider}"
