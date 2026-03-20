@@ -1,4 +1,4 @@
-.PHONY: help up down clean run test lint install build
+.PHONY: help up down clean run prod prod-down test lint install build
 
 # Load .env if present
 ifneq (,$(wildcard .env))
@@ -33,6 +33,16 @@ clean: ## Stop services and remove volumes (fresh start)
 run: up ## Start Qdrant + dev server (Swagger UI at /docs)
 	@printf "$(BLUE)Starting resonance at http://localhost:8000/docs$(RESET)\n"
 	uv run resonance-dev
+
+prod: ## Start full stack (Qdrant + resonance + TEI)
+	@printf "$(BLUE)Starting production stack...$(RESET)\n"
+	docker compose up -d --build
+	@printf "$(GREEN)Stack running at http://localhost:8000$(RESET)\n"
+
+prod-down: ## Stop production stack
+	@printf "$(BLUE)Stopping production stack...$(RESET)\n"
+	docker compose down
+	@printf "$(GREEN)Stack stopped$(RESET)\n"
 
 test: ## Run pytest
 	@printf "$(BLUE)Running tests...$(RESET)\n"
