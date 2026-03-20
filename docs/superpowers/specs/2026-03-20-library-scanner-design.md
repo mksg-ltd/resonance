@@ -44,15 +44,16 @@ class SongData:
     title: str
     audio_path: Path
     filename: str
-    lyrics_text: str
     lines: list[LrcLine]
     album: str | None = None
+    lyrics_source: str = "sidecar_lrc"  # "embedded" or "sidecar_lrc"
 ```
 
 - `audio_path`: absolute path to the audio file on disk
 - `filename`: audio filename, set by scanner, stored in Qdrant payload
 - `lines`: timestamped `LrcLine` list — only synced lyrics are supported in this phase
 - `album`: from audio tags when available, None otherwise
+- Full lyrics text is derived from `lines` (same as `LrcChunk.lyrics` today) — no separate field needed
 
 ### LibraryScanner
 
@@ -88,6 +89,8 @@ LibraryScanner
 
 **Metadata source priority:** Always prefer audio file tags over filename parsing. mutagen reads tags from any supported format. Filename parsing (`03 - Coldplay - Ghost Story.flac`) is the fallback only when tags are missing.
 
+**Per-field fallback rule:** For each metadata field (`artist`, `title`), use the audio tag value if present and non-empty; otherwise fall back to filename parsing (same logic as current `LrcLyric._extract_metadata`, applied to the audio filename stem). `album` is always nullable — no fallback needed.
+
 **Embedded lyrics — tag formats the implementer must handle:**
 
 | Tag System        | Formats         | Synced Lyrics Field                             | Metadata Fields                                 |
@@ -98,8 +101,8 @@ LibraryScanner
 
 The implementer should consult the mutagen documentation and the relevant tag specs (ID3v2.4, Vorbis Comments, MP4 atoms) for parsing details. Key things to verify during implementation:
 
-- `SYLT` frames have a content type field — only `LYRICS` type is relevant (not karaoke, etc.)
-- Vorbis and MP4 lyrics fields may contain plain text (unsynced) or LRC-formatted text (synced). Parse the content to determine which.
+- `SYLT` frames are binary, not text. mutagen exposes them as a list of `(text: str, timestamp_ms: int)` tuples via `tags['SYLT:...'].text`. Convert timestamps to seconds by dividing by 1000.0 to create `LrcLine` objects. The `content_type` field must equal 1 (LYRICS) — content_type 2 is karaoke, skip it.
+- Vorbis and MP4 lyrics fields may contain plain text (unsynced) or LRC-formatted text (synced). Parse the content to check for LRC-style timestamps (`[mm:ss.xx]`). If timestamps are present, use `parse_lrc_text()` to parse into `LrcLine` objects. If not, the lyrics are unsynced — skip with a warning.
 - ID3v2 may have multiple `USLT`/`SYLT` frames for different languages. Pick the first or the one matching a configured language preference.
 
 **Extraction order is not configurable.** Embedded first, sidecar second. This is the correct priority — embedded lyrics are authoritative, sidecar is supplementary.
@@ -129,7 +132,7 @@ Per-chunk payload stored in Qdrant:
     "section": "verse_1",
     "position": 0,
     "total_sections": 4,
-    "lyrics": "...",
+    "lyrics": "...",                                  # full chunk lyrics, no truncation
     "start_sec": 12.5,
     "duration_sec": 45.0,
 }
@@ -139,6 +142,7 @@ Per-chunk payload stored in Qdrant:
 - `audio_path`: path relative to the collection's `data_dir` — portable across Docker mount points, used by future m3u generation
 - `lyrics_source`: `"embedded"` or `"sidecar_lrc"` — for debugging/observability
 - `album`: from tags, nullable
+- `lyrics`: full chunk lyrics text, stored without truncation (the previous 500-char truncation is removed — chunks are already bounded by the chunking strategy)
 
 Collection metadata point (id=0) is unchanged — still stores provider/model/dimensions.
 
@@ -160,7 +164,7 @@ Changes to `run_ingest`:
 
 1. Replace `source_dir.rglob("*.lrc")` + `chunk_song()` with `LibraryScanner().scan(source_dir)`
 2. Scanner yields `SongData` (already parsed, metadata from tags)
-3. New `chunk_song_data(song_data)` in `chunker.py` — takes `SongData`, uses `.lines` to chunk (same chunking logic as today)
+3. New `chunk_song_data(song_data, gap_threshold_sec, min_chunk_lines)` in `chunker.py` — takes `SongData` plus chunking params, uses `.lines` to chunk (same chunking logic as today)
 4. Build Qdrant payload from `SongData` + chunk fields, including `audio_path` as `str(song.audio_path.relative_to(source_dir))`
 
 **What doesn't change:**
@@ -173,8 +177,10 @@ Changes to `run_ingest`:
 
 **What gets removed:**
 
-- `LrcLyric.from_file()` and `LrcLyric._extract_metadata()` — scanner handles discovery and metadata
-- `MUSIC_DIR` hardcoded constant — already passed as `data_dir`
+- `LrcLyric` class in `models.py` — replaced by `SongData`
+- `chunk_song(Path)` in `chunker.py` — replaced by `chunk_song_data(SongData, ...)`
+- `MUSIC_DIR` hardcoded constant in `routes/ingest.py` — already passed as `data_dir`
+- Corresponding imports of `chunk_song` and `LrcLyric` in `routes/ingest.py`
 
 ### File Layout
 
@@ -183,7 +189,7 @@ src/resonance/
 ├── scanner.py          # NEW — LibraryScanner, extract_embedded, extract_sidecar_lrc
 ├── models.py           # SongData added alongside existing LrcLine, LrcChunk
 ├── chunker.py          # chunk_song_data(SongData) replaces chunk_song(Path)
-├── parser.py           # unchanged — still parses LRC content into LrcLines
+├── parser.py           # minor change — add parse_lrc_text(text: str) -> list[LrcLine] for in-memory parsing (used by extract_embedded)
 ├── routes/ingest.py    # run_ingest uses LibraryScanner
 └── ...
 ```
