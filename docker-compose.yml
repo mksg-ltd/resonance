@@ -17,7 +17,8 @@ services:
       - /home/mk/mnt/homelab-data/media/music/tamil/playlists:/app/music/tamil/playlists:rw
       - /home/mk/mnt/homelab-data/media/music/english/playlists:/app/music/english/playlists:rw
     environment:
-      - RESONANCE__SERVER__DEBUG=true
+      - RESONANCE__DEBUG=true
+      - RESONANCE__SERVE_DOCS=true
       - RESONANCE__QDRANT__URL=http://qdrant:6333
     depends_on:
       - qdrant
