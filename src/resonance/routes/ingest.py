@@ -8,14 +8,12 @@ from pydantic import BaseModel
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-from resonance.chunker import chunk_song
+from resonance.chunker import chunk_song_data
 from resonance.config import Settings
 from resonance.embedders.base import EmbeddingProvider
+from resonance.scanner import LibraryScanner
 
 router = APIRouter(prefix="/api")
-
-# Hardcoded until Jellyfin API integration (PRD-04/05)
-MUSIC_DIR = Path("/home/mk/mnt/homelab-data/media/music/english")
 
 
 class IngestRequest(BaseModel):
@@ -67,13 +65,13 @@ def run_ingest(  # noqa: PLR0913
     and stores vectors + metadata in Qdrant.
     """
     collection = collection or settings.qdrant.collection
-    source_dir = data_dir or MUSIC_DIR
     gap_threshold = gap_threshold_sec if gap_threshold_sec is not None else settings.chunking.gap_threshold_sec
+    min_lines = min_chunk_lines if min_chunk_lines is not None else settings.chunking.min_chunk_lines
 
     print(
         f"Ingest: collection={collection}, provider={embedder.provider_name}, "
         f"model={embedder.model_name} ({embedder.dimensions}d), "
-        f"gap={gap_threshold}s, min_lines={min_chunk_lines}, force={force}, source={source_dir}"
+        f"gap={gap_threshold}s, min_lines={min_lines}, force={force}, source={data_dir}"
     )
 
     # Check if collection exists and has data
@@ -92,22 +90,32 @@ def run_ingest(  # noqa: PLR0913
                 stored_model=stored_model,
             )
 
-    # Parse and chunk all LRC files
+    # Validate data_dir — required for scanning
+    if data_dir is None:
+        msg = "data_dir is required — set it in config or pass via --data-dir CLI flag"
+        raise ValueError(msg)
+    source_dir = data_dir
+
+    # Scan library and chunk songs
     chunks_to_embed = []
     skipped = 0
     files_processed = 0
 
-    for lrc_file in sorted(source_dir.rglob("*.lrc")):
-        lyric = chunk_song(lrc_file, gap_threshold_sec=gap_threshold)
-        if not lyric or not lyric.chunks:
+    scanner = LibraryScanner()
+    for song in scanner.scan(source_dir):
+        chunks = chunk_song_data(song, gap_threshold_sec=gap_threshold, min_chunk_lines=min_lines)
+        if not chunks:
             skipped += 1
             continue
         files_processed += 1
         chunks_to_embed.extend(
             {
-                "artist": lyric.artist,
-                "title": lyric.title,
-                "filename": lyric.filename,
+                "artist": song.artist,
+                "title": song.title,
+                "album": song.album,
+                "filename": song.filename,
+                "audio_path": str(song.audio_path.relative_to(source_dir)),
+                "lyrics_source": song.lyrics_source,
                 "section": chunk.section_name,
                 "position": chunk.position,
                 "total_sections": chunk.total_chunks,
@@ -115,7 +123,7 @@ def run_ingest(  # noqa: PLR0913
                 "start_sec": chunk.start_sec,
                 "duration_sec": chunk.duration_sec,
             }
-            for chunk in lyric.chunks
+            for chunk in chunks
         )
 
     if not chunks_to_embed:
@@ -148,11 +156,14 @@ def run_ingest(  # noqa: PLR0913
                 payload={
                     "artist": chunk["artist"],
                     "title": chunk["title"],
+                    "album": chunk["album"],
                     "filename": chunk["filename"],
+                    "audio_path": chunk["audio_path"],
+                    "lyrics_source": chunk["lyrics_source"],
                     "section": chunk["section"],
                     "position": chunk["position"],
                     "total_sections": chunk["total_sections"],
-                    "lyrics": chunk["lyrics"][:500],
+                    "lyrics": chunk["lyrics"],
                     "start_sec": chunk["start_sec"],
                     "duration_sec": chunk["duration_sec"],
                 },

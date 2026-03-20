@@ -7,9 +7,8 @@ Two strategies, applied in priority order:
 """
 
 import re
-from pathlib import Path
 
-from .models import LrcChunk, LrcLine, LrcLyric, SongData
+from .models import LrcChunk, LrcLine, SongData
 
 # Matches section tags like [Chorus], [Verse 1-Akon], [Bridge], [Outro]
 SECTION_TAG_RE = re.compile(
@@ -101,30 +100,6 @@ def chunk_by_gaps(
         chunks.append(LrcChunk(section_name=name, lines=chunk_lines))
 
     return chunks
-
-
-def chunk_song(filepath: Path, gap_threshold_sec: float = 5.0) -> LrcLyric | None:
-    """Parse and chunk a song, returning a fully populated LrcLyric.
-
-    Returns None if the file can't be parsed or has no content.
-    """
-    lyric = LrcLyric.from_file(filepath)
-    if not lyric:
-        return None
-
-    if has_section_tags(lyric.lines):
-        chunks = chunk_by_tags(lyric.lines)
-    else:
-        chunks = chunk_by_gaps(lyric.lines, gap_threshold_sec=gap_threshold_sec)
-
-    # Filter empty and add position metadata
-    chunks = [c for c in chunks if c.lyrics.strip()]
-    for i, chunk in enumerate(chunks):
-        chunk.position = i
-        chunk.total_chunks = len(chunks)
-
-    lyric.chunks = chunks
-    return lyric
 
 
 def chunk_song_data(

@@ -146,28 +146,43 @@ class TestIngestRoute:
         assert data["stored_model"] == "text-embedding-3-large"
         assert data["active_model"] == "text-embedding-3-small"
 
-    def test_ingest_processes_lrc_files(self, tmp_path):
-        client, mock_qdrant, mock_embedder = _make_test_client()
+    def test_ingest_processes_audio_files(self, tmp_path):
+        """Test that audio files with sidecar LRC are ingested via LibraryScanner."""
+        _, mock_qdrant, mock_embedder = _make_test_client()
         mock_qdrant.get_collections.return_value = MagicMock(collections=[])
 
-        # Create a test LRC file
-        lrc_content = """[00:00.00] Test line one
-[00:05.00] Test line two
-[00:10.00] Test line three
-[00:15.00] Test line four
-"""
+        lrc_content = "[00:00.00] Test line one\n[00:05.00] Test line two\n[00:10.00] Test line three\n[00:15.00] Test line four\n"
+        audio_file = tmp_path / "01 - Test Artist - Test Song.flac"
+        audio_file.write_bytes(b"\x00" * 64)
         lrc_file = tmp_path / "01 - Test Artist - Test Song.lrc"
         lrc_file.write_text(lrc_content)
 
         mock_embedder.embed.return_value = [[0.1] * 1536]
 
-        with patch("resonance.routes.ingest.MUSIC_DIR", tmp_path):
-            response = client.post("/api/ingest", json={"force": True})
+        from resonance.routes.ingest import run_ingest
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["files_processed"] == 1
-        assert data["chunks_created"] >= 1
+        result = run_ingest(
+            qdrant=mock_qdrant,
+            embedder=mock_embedder,
+            settings=Settings(
+                server={"debug": True},
+                qdrant={"url": "http://localhost:6333", "collection": "test_lyrics"},
+            ),
+            collection="test_lyrics",
+            force=True,
+            data_dir=tmp_path,
+        )
+
+        assert result.files_processed == 1
+        assert result.chunks_created >= 1
+
+        # Verify new payload fields in upserted points
+        upsert_call = mock_qdrant.upsert.call_args_list[-1]
+        points = upsert_call.kwargs["points"]
+        payload = points[0].payload
+        assert "audio_path" in payload
+        assert "lyrics_source" in payload
+        assert payload["filename"].endswith(".flac")
 
 
 class TestConfigRoute:
