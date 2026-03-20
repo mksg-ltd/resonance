@@ -9,7 +9,9 @@ Usage:
 from argparse import ArgumentParser
 from pathlib import Path
 
-from .chunker import chunk_song
+from .chunker import chunk_song_data
+from .models import SongData
+from .parser import parse_lrc_lines
 
 
 def main():
@@ -22,17 +24,30 @@ def main():
         print(f"File not found: {args.file}")
         return
 
-    lyric = chunk_song(args.file, gap_threshold_sec=args.gap)
-    if not lyric:
+    lines = parse_lrc_lines(args.file)
+    if not lines:
         print(f"Could not parse: {args.file}")
         return
 
-    print(f"\n  {lyric.artist} — {lyric.title}")
-    print(f"  {lyric.filename}")
-    print(f"  Duration: {lyric.duration_sec:.1f}s | Chunks: {len(lyric.chunks)} | Gap threshold: {args.gap}s")
+    song = SongData(
+        artist="Unknown",
+        title=args.file.stem,
+        audio_path=args.file,
+        filename=args.file.name,
+        lines=lines,
+    )
+    chunks = chunk_song_data(song, gap_threshold_sec=args.gap)
+    if not chunks:
+        print(f"No chunks produced: {args.file}")
+        return
+
+    total_duration = lines[-1].timestamp_sec - lines[0].timestamp_sec if lines else 0
+    print(f"\n  {song.artist} — {song.title}")
+    print(f"  {song.filename}")
+    print(f"  Duration: {total_duration:.1f}s | Chunks: {len(chunks)} | Gap threshold: {args.gap}s")
     print(f"  {'─' * 60}")
 
-    for chunk in lyric.chunks:
+    for chunk in chunks:
         print(f"\n  [{chunk.section_name}] (part {chunk.position + 1}/{chunk.total_chunks})")
         print(f"  {chunk.start_sec:.1f}s → {chunk.end_sec:.1f}s ({chunk.duration_sec:.1f}s)")
         print()
@@ -43,7 +58,7 @@ def main():
                 print(f"    {line.timestamp_str}  ···")
 
     print(f"\n  {'─' * 60}")
-    print(f"  Total: {len(lyric.chunks)} chunks, {len(lyric.lines)} lines\n")
+    print(f"  Total: {len(chunks)} chunks, {len(lines)} lines\n")
 
 
 if __name__ == "__main__":

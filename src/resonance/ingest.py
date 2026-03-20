@@ -1,7 +1,7 @@
 """
-Ingest LRC lyrics into Qdrant.
+Ingest song lyrics into Qdrant.
 
-Pipeline: parse LRC files → chunk into sections → embed → store in Qdrant
+Pipeline: scan audio files → extract lyrics (embedded/sidecar) → chunk → embed → store in Qdrant
 
 Usage:
     python -m resonance.ingest
@@ -32,7 +32,7 @@ def main():
     parser.add_argument(
         "--data-dir",
         type=Path,
-        help="Directory containing LRC files (default: /data/media/music/english)",
+        help="Directory containing audio files with lyrics (embedded or .lrc sidecar)",
     )
     parser.add_argument(
         "--force",

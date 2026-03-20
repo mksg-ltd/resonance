@@ -49,7 +49,7 @@ def main():
     for i, result in enumerate(results, 1):
         print(f"  {i}. [{result.score:.4f}] {result.artist} — {result.title}")
         print(f"     Section: {result.section} (part {result.position + 1}/{result.total_sections})")
-        for line in result.lyrics_preview.split("\n")[:2]:
+        for line in result.lyrics.split("\n")[:2]:
             print(f"     | {line}")
         print()
 
