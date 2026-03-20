@@ -48,7 +48,6 @@ class PlaylistResponse(BaseModel):
     name: str                    # sanitized playlist name
     filename: str                # e.g. "letting-go-mix.m3u"
     track_count: int
-    path: str                    # relative path from playlists_dir, e.g. "letting-go-mix.m3u"
 ```
 
 Behavior:
@@ -63,7 +62,7 @@ Errors:
 
 - `400` if `tracks` is empty
 - `400` if `name` is empty or sanitizes to empty
-- `500` if `playlists_dir` is not configured
+- `503` if `playlists_dir` is not configured — `{"detail": "playlists.dir is not configured"}`
 
 ### m3u File Format
 
@@ -107,7 +106,7 @@ playlists:
   dir: /data/media/music/english/Playlists
 ```
 
-If `playlists.dir` is not set, the endpoint returns a `500` with a clear error message.
+If `playlists.dir` is not set, the endpoint returns `503 Service Unavailable` with `{"detail": "playlists.dir is not configured"}`.
 
 ### File Layout
 
@@ -138,3 +137,5 @@ Example: `"Songs About Letting Go!"` → `"songs-about-letting-go"`
 ### Exposing \_extract_metadata_from_filename
 
 The function `_extract_metadata_from_filename` in `scanner.py` is currently module-private (prefixed with `_`). Since the playlist endpoint needs it to generate `#EXTINF` display names, rename it to `extract_metadata_from_filename` (drop the underscore) and keep it in `scanner.py`. It has no dependencies beyond `re` and is a pure function.
+
+The internal caller `_read_metadata` at scanner.py:171 must also be updated to call the renamed function.
