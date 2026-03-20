@@ -20,11 +20,7 @@ class TestSettingsDefaults:
         assert settings.chunking.gap_threshold_sec == 10.0
         assert settings.chunking.min_chunk_lines == 2
         assert settings.debug is False
-        assert settings.data_dir is None
 
-    def test_playlist_defaults_to_none(self):
-        settings = Settings()
-        assert settings.playlists.dir is None
 
 
 class TestYamlLoading:

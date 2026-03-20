@@ -22,6 +22,7 @@ class IngestRequest(BaseModel):
 
     provider: str  # named provider config from conf.d/ (e.g., "ollama-bge-m3", "vyakyarth")
     collection: str  # Qdrant collection name
+    data_dir: str  # root music directory to scan
     gap_threshold_sec: float | None = None
     min_chunk_lines: int | None = None
     force: bool = False
@@ -252,19 +253,18 @@ def _store_collection_metadata(
 @router.post("/ingest", response_model=IngestResponse)
 def ingest(body: IngestRequest, request: Request) -> IngestResponse:
     """Trigger LRC ingestion pipeline."""
-    settings = request.app.state.settings
     embedder = create_embedder_for_name(body.provider)
 
     result = run_ingest(
         qdrant=request.app.state.qdrant,
         embedder=embedder,
-        settings=settings,
+        settings=request.app.state.settings,
         config_name=body.provider,
         collection=body.collection,
         gap_threshold_sec=body.gap_threshold_sec,
         min_chunk_lines=body.min_chunk_lines,
         force=body.force,
-        data_dir=Path(settings.data_dir) if settings.data_dir else None,
+        data_dir=Path(body.data_dir),
     )
 
     return IngestResponse(

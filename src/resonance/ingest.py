@@ -38,7 +38,8 @@ def main():
     parser.add_argument(
         "--data-dir",
         type=Path,
-        help="Directory containing audio files with lyrics (embedded or .lrc sidecar)",
+        required=True,
+        help="Root music directory to scan for audio files with lyrics",
     )
     parser.add_argument(
         "--force",
@@ -70,7 +71,7 @@ def main():
         collection=args.collection,
         gap_threshold_sec=args.gap,
         force=args.force,
-        data_dir=args.data_dir or (Path(settings.data_dir) if settings.data_dir else None),
+        data_dir=args.data_dir,
     )
 
     if result.files_processed == 0 and result.chunks_created == 0 and result.skipped == 0:

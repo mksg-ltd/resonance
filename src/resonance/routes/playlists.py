@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from resonance.scanner import extract_metadata_from_filename
@@ -15,6 +15,7 @@ class PlaylistRequest(BaseModel):
     """Playlist creation request."""
 
     name: str
+    data_dir: str  # root music directory (playlists written to {data_dir}/Playlists/)
     tracks: list[str]
 
 
@@ -36,13 +37,8 @@ def _sanitize_name(name: str) -> str:
 
 
 @router.post("/playlists", response_model=PlaylistResponse)
-def create_playlist(body: PlaylistRequest, request: Request) -> PlaylistResponse:
+def create_playlist(body: PlaylistRequest) -> PlaylistResponse:
     """Create an m3u playlist file from a list of audio paths."""
-    settings = request.app.state.settings
-
-    if not settings.playlists.dir:
-        raise HTTPException(status_code=503, detail="playlists.dir is not configured")
-
     if not body.tracks:
         raise HTTPException(status_code=400, detail="tracks list is empty")
 
@@ -50,8 +46,8 @@ def create_playlist(body: PlaylistRequest, request: Request) -> PlaylistResponse
     if not sanitized:
         raise HTTPException(status_code=400, detail="playlist name is empty or contains only special characters")
 
-    # Write m3u file
-    playlists_dir = Path(settings.playlists.dir)
+    # Write m3u file to {data_dir}/Playlists/
+    playlists_dir = Path(body.data_dir) / "Playlists"
     playlists_dir.mkdir(parents=True, exist_ok=True)
 
     filename = f"{sanitized}.m3u"

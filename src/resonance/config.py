@@ -22,12 +22,6 @@ class ChunkingConfig(BaseModel):
     min_chunk_lines: int = 2
 
 
-class PlaylistConfig(BaseModel):
-    """Playlist generation settings."""
-
-    dir: str | None = None
-
-
 class OpenAIProviderConfig(BaseModel):
     """OpenAI-compatible embedding configuration.
 
@@ -71,10 +65,8 @@ class Settings(BaseSettings):
     )
 
     debug: bool = False  # enables Swagger UI, CORS, reload — set via RESONANCE__DEBUG=true
-    data_dir: str | None = None  # root music directory (used by ingest + playlists)
     qdrant: QdrantConfig = QdrantConfig()
     chunking: ChunkingConfig = ChunkingConfig()
-    playlists: PlaylistConfig = PlaylistConfig()
 
     @classmethod
     def settings_customise_sources(
