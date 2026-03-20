@@ -1,3 +1,0 @@
-chunking:
-  gap_threshold_sec: 10.0
-  min_chunk_lines: 2

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from qdrant_client import QdrantClient
 
-from .config import load_settings
+from .config import Settings
 from .embedders import create_embedder_for_name
 from .routes.ingest import run_ingest
 
@@ -48,7 +48,7 @@ def main():
     )
     args = parser.parse_args()
 
-    settings = load_settings()
+    settings = Settings()
     embedder = create_embedder_for_name(args.provider)
     qdrant = QdrantClient(
         url=settings.qdrant.url,

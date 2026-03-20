@@ -1,7 +1,5 @@
 """Tests for configuration loading."""
 
-import os
-
 import pytest
 
 from resonance.config import (
@@ -9,7 +7,6 @@ from resonance.config import (
     OpenAIProviderConfig,
     Settings,
     load_provider_config,
-    load_settings,
 )
 
 
@@ -20,64 +17,23 @@ class TestSettingsDefaults:
         assert settings.chunking.gap_threshold_sec == 10.0
         assert settings.chunking.min_chunk_lines == 2
         assert settings.debug is False
+        assert settings.serve_docs is False
 
-
-
-class TestYamlLoading:
-    def test_load_from_yaml(self, tmp_path):
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text("""
-qdrant:
-  url: http://qdrant:6333
-chunking:
-  gap_threshold_sec: 8.0
-debug: true
-""")
-        settings = load_settings(config_path=config_file)
-        assert settings.qdrant.url == "http://qdrant:6333"
-        assert settings.chunking.gap_threshold_sec == 8.0
-        assert settings.debug is True
-
-    def test_partial_yaml_uses_defaults(self, tmp_path):
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text("""
-qdrant:
-  url: http://custom:6333
-""")
-        settings = load_settings(config_path=config_file)
-        assert settings.qdrant.url == "http://custom:6333"
-        assert settings.debug is False
-
-    def test_missing_config_uses_defaults(self, tmp_path):
-        settings = load_settings(config_path=tmp_path / "nonexistent.yaml")
-        assert settings.qdrant.url == "http://localhost:6333"
-
-    def test_env_var_expansion_in_yaml(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("TEST_QDRANT_URL", "http://custom:6333")
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text("""
-qdrant:
-  url: ${TEST_QDRANT_URL}
-""")
-        settings = load_settings(config_path=config_file)
-        assert settings.qdrant.url == "http://custom:6333"
-
-
-class TestEnvVarOverride:
-    def test_env_var_overrides_yaml(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("RESONANCE__QDRANT__URL", "http://env-qdrant:6333")
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text("""
-qdrant:
-  url: http://yaml-qdrant:6333
-""")
-        settings = load_settings(config_path=config_file)
-        assert settings.qdrant.url == "http://env-qdrant:6333"
-
-    def test_env_var_overrides_default(self, monkeypatch):
+    def test_env_var_overrides(self, monkeypatch):
         monkeypatch.setenv("RESONANCE__DEBUG", "true")
+        monkeypatch.setenv("RESONANCE__SERVE_DOCS", "true")
+        monkeypatch.setenv("RESONANCE__QDRANT__URL", "http://qdrant:6333")
         settings = Settings()
         assert settings.debug is True
+        assert settings.serve_docs is True
+        assert settings.qdrant.url == "http://qdrant:6333"
+
+    def test_chunking_env_vars(self, monkeypatch):
+        monkeypatch.setenv("RESONANCE__CHUNKING__GAP_THRESHOLD_SEC", "8.0")
+        monkeypatch.setenv("RESONANCE__CHUNKING__MIN_CHUNK_LINES", "3")
+        settings = Settings()
+        assert settings.chunking.gap_threshold_sec == 8.0
+        assert settings.chunking.min_chunk_lines == 3
 
 
 class TestProviderConfig:
@@ -114,26 +70,3 @@ class TestProviderConfig:
         (tmp_path / "bad.yaml").write_text("type: pytorch\nmodel: something\n")
         with pytest.raises(ValueError, match="Unknown provider type"):
             load_provider_config("bad", config_dir=tmp_path)
-
-
-class TestConfigDiscovery:
-    def test_env_var_config_path(self, tmp_path, monkeypatch):
-        config_file = tmp_path / "custom.yaml"
-        config_file.write_text("""
-qdrant:
-  url: http://custom:6333
-""")
-        monkeypatch.setenv("RESONANCE_CONFIG", str(config_file))
-        monkeypatch.chdir(tmp_path)
-        settings = load_settings()
-        assert settings.qdrant.url == "http://custom:6333"
-
-    def test_local_config_yaml(self, tmp_path, monkeypatch):
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text("""
-debug: true
-""")
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.delenv("RESONANCE_CONFIG", raising=False)
-        settings = load_settings()
-        assert settings.debug is True

@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from qdrant_client import QdrantClient
 
-from resonance.config import Settings, load_settings
+from resonance.config import Settings
 from resonance.routes.collections import router as collections_router
 from resonance.routes.config import router as config_router
 from resonance.routes.health import router as health_router
@@ -39,10 +39,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Create and configure the FastAPI application."""
     if settings is None:
-        settings = load_settings()
+        settings = Settings()
 
-    docs_url = "/docs" if settings.debug else None
-    redoc_url = "/redoc" if settings.debug else None
+    docs_url = "/docs" if settings.serve_docs else None
+    redoc_url = "/redoc" if settings.serve_docs else None
 
     app = FastAPI(
         title="resonance",
@@ -81,7 +81,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 def cli() -> None:
     """CLI entry point for resonance-server command."""
-    settings = load_settings()
+    settings = Settings()
     uvicorn.run(
         "resonance.app:create_app",
         factory=True,
@@ -93,10 +93,11 @@ def cli() -> None:
 
 
 def dev() -> None:
-    """CLI entry point for local development — always enables debug + reload."""
+    """CLI entry point for local development — always enables debug + reload + docs."""
     import os
 
     os.environ["RESONANCE__DEBUG"] = "true"
+    os.environ["RESONANCE__SERVE_DOCS"] = "true"
     uvicorn.run(
         "resonance.app:create_app",
         factory=True,

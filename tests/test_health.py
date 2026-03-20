@@ -27,7 +27,7 @@ class TestSwaggerUI:
         from resonance.app import create_app
         from resonance.config import Settings
 
-        settings = Settings(debug=False)
+        settings = Settings(debug=False, serve_docs=False)
         app = create_app(settings=settings)
         client = __import__("fastapi.testclient", fromlist=["TestClient"]).TestClient(app)
         app.state.qdrant = __import__("unittest.mock", fromlist=["MagicMock"]).MagicMock()

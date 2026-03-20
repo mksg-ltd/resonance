@@ -10,7 +10,7 @@ from argparse import ArgumentParser
 
 from qdrant_client import QdrantClient
 
-from .config import load_settings
+from .config import Settings
 from .embedders import create_embedder_for_name
 from .routes.search import run_search
 
@@ -28,7 +28,7 @@ def main():
     parser.add_argument("--limit", type=int, default=15, help="Number of results")
     args = parser.parse_args()
 
-    settings = load_settings()
+    settings = Settings()
     embedder = create_embedder_for_name(args.provider)
     qdrant = QdrantClient(
         url=settings.qdrant.url,

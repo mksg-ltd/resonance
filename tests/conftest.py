@@ -14,6 +14,7 @@ def test_settings() -> Settings:
     """Settings with test defaults."""
     return Settings(
         debug=True,
+        serve_docs=True,
         qdrant={"url": "http://localhost:6333"},
     )
 
