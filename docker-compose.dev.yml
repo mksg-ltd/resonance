@@ -6,3 +6,16 @@ services:
     ports:
       - "6333:6333"
       - "6334:6334"
+  # HuggingFace Text Embeddings Inference — serves any HF embedding model
+  # with an OpenAI-compatible API. Use for models that can't run on Ollama
+  # (e.g., XLM-RoBERTa-based models like Vyakyarth).
+  # Uncomment and set MODEL_ID to use.
+  tei:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
+    ports:
+      - "8085:80"
+    volumes:
+      - ./tei_cache:/data
+    environment:
+      - MODEL_ID=krutrim-ai-labs/Vyakyarth
+      - MAX_BATCH_TOKENS=16384

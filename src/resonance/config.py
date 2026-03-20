@@ -51,10 +51,16 @@ class ServerConfig(BaseModel):
 
 
 class OpenAIProviderConfig(BaseModel):
-    """OpenAI-specific embedding configuration."""
+    """OpenAI-compatible embedding configuration.
 
-    api_key: SecretStr
+    Works with OpenAI API, or any OpenAI-compatible server (e.g., HuggingFace TEI).
+    Set base_url to point at a local server.
+    """
+
+    api_key: SecretStr = SecretStr("dummy")  # not needed for local servers like TEI
     model: str = "text-embedding-3-small"
+    base_url: str | None = None  # e.g., "http://localhost:8080/v1" for TEI
+    dimensions: int | None = None  # override auto-detected dimensions
 
 
 class OllamaProviderConfig(BaseModel):

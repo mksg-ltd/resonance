@@ -12,12 +12,15 @@ KNOWN_DIMENSIONS: dict[str, int] = {
 
 
 class OpenAIEmbedder:
-    """Embed text using OpenAI's embedding API."""
+    """Embed text using OpenAI's embedding API (or any OpenAI-compatible server)."""
 
     def __init__(self, config: OpenAIProviderConfig) -> None:
-        self._client = OpenAI(api_key=config.api_key.get_secret_value())
+        client_kwargs = {"api_key": config.api_key.get_secret_value()}
+        if config.base_url:
+            client_kwargs["base_url"] = config.base_url
+        self._client = OpenAI(**client_kwargs)
         self._model = config.model
-        self._dimensions = KNOWN_DIMENSIONS.get(config.model, 1536)
+        self._dimensions = config.dimensions or KNOWN_DIMENSIONS.get(config.model, 1536)
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Embed a batch of texts using OpenAI API."""
