@@ -128,7 +128,7 @@ class TestEmbeddedLyricsExtraction:
         assert result.lines[0].text == "First line"
         assert result.lines[1].timestamp_sec == 5.5
         assert result.lines[2].timestamp_sec == 10.0
-        assert result.lyrics_source == "embedded_id3_sylt"
+        assert result.lyrics_source == "embedded"
 
     def test_sylt_type_not1_is_skipped(self, tmp_path):
         """SYLT frames with type!=1 (e.g. karaoke) are skipped."""
@@ -177,7 +177,7 @@ class TestEmbeddedLyricsExtraction:
         assert len(result.lines) == 2
         assert result.lines[0].text == "Hello world"
         assert result.lines[1].timestamp_sec == 5.5
-        assert result.lyrics_source == "embedded_vorbis"
+        assert result.lyrics_source == "embedded"
 
     def test_mp4_lrc_text_parsed(self, tmp_path):
         """MP4 ©lyr tag with LRC-formatted text is parsed into LrcLines."""
@@ -202,7 +202,7 @@ class TestEmbeddedLyricsExtraction:
 
         assert result is not None
         assert len(result.lines) == 2
-        assert result.lyrics_source == "embedded_mp4"
+        assert result.lyrics_source == "embedded"
 
     def test_vorbis_plain_text_skips_with_warning(self, tmp_path, caplog):
         """Plain text lyrics (no timestamps) in Vorbis returns None and logs WARNING."""

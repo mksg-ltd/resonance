@@ -80,7 +80,7 @@ class LibraryScanner:
                 continue
 
             artist, title, album = _read_metadata(audio_path)
-            logger.debug("Embedded ID3 SYLT found: %s", audio_path.name)
+            logger.debug("Embedded synced lyrics: %s", audio_path.name)
             return SongData(
                 artist=artist,
                 title=title,
@@ -88,7 +88,7 @@ class LibraryScanner:
                 filename=audio_path.name,
                 lines=lines,
                 album=album,
-                lyrics_source="embedded_id3_sylt",
+                lyrics_source="embedded",
             )
 
         return None
@@ -96,20 +96,17 @@ class LibraryScanner:
     def _try_lrc_in_tag(self, tags: mutagen.FileType, audio_path: Path) -> SongData | None:
         """Extract LRC-formatted lyrics from Vorbis comments or MP4 tags."""
         text: str | None = None
-        source: str | None = None
 
         if isinstance(tags, mutagen.flac.FLAC | mutagen.oggvorbis.OggVorbis | mutagen.oggopus.OggOpus):
             for key in ("lyrics", "LYRICS"):
                 values = tags.get(key)
                 if values:
                     text = values[0]
-                    source = "embedded_vorbis"
                     break
         elif isinstance(tags, mutagen.mp4.MP4):
             values = tags.get("©lyr")
             if values:
                 text = values[0]
-                source = "embedded_mp4"
 
         if text is None:
             return None
@@ -121,7 +118,7 @@ class LibraryScanner:
             return None
 
         artist, title, album = _read_metadata(audio_path)
-        logger.debug("Embedded %s lyrics found: %s", source, audio_path.name)
+        logger.debug("Embedded synced lyrics: %s", audio_path.name)
         return SongData(
             artist=artist,
             title=title,
@@ -129,7 +126,7 @@ class LibraryScanner:
             filename=audio_path.name,
             lines=lines,
             album=album,
-            lyrics_source=source,  # type: ignore[arg-type]
+            lyrics_source="embedded",
         )
 
     def _extract_sidecar_lrc(self, audio_path: Path) -> SongData | None:
