@@ -6,9 +6,14 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import mutagen
+import mutagen.flac
+import mutagen.mp3
+import mutagen.mp4
+import mutagen.oggopus
+import mutagen.oggvorbis
 
-from .models import SongData
-from .parser import parse_lrc_lines
+from .models import LrcLine, SongData
+from .parser import parse_lrc_lines, parse_lrc_text
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +44,93 @@ class LibraryScanner:
     def _extract_embedded(self, audio_path: Path) -> SongData | None:
         """Try to extract synced lyrics from embedded audio tags.
 
-        Placeholder — full implementation in Task 5.
+        Supports ID3v2 SYLT frames (MP3), Vorbis comments (FLAC/OGG/Opus),
+        and MP4/iTunes tags (M4A/AAC).
         """
+        try:
+            tags = mutagen.File(audio_path)
+        except Exception:  # noqa: BLE001
+            return None
+
+        if tags is None:
+            return None
+
+        # Try ID3 SYLT (MP3)
+        result = self._try_id3_sylt(tags, audio_path)
+        if result is not None:
+            return result
+
+        # Try Vorbis/MP4 lyrics fields
+        return self._try_lrc_in_tag(tags, audio_path)
+
+    def _try_id3_sylt(self, tags: mutagen.FileType, audio_path: Path) -> SongData | None:
+        """Extract synced lyrics from ID3v2 SYLT frames (MP3 files)."""
+        if not isinstance(tags, mutagen.mp3.MP3):
+            return None
+
+        for key, frame in tags.items():
+            if not key.startswith("SYLT"):
+                continue
+            if frame.type != 1:
+                logger.debug("Skipping SYLT frame with type=%d (not lyrics): %s", frame.type, audio_path.name)
+                continue
+
+            lines = [LrcLine(timestamp_sec=ts_ms / 1000.0, text=text) for text, ts_ms in frame.text]
+            if not lines:
+                continue
+
+            artist, title, album = _read_metadata(audio_path)
+            logger.debug("Embedded ID3 SYLT found: %s", audio_path.name)
+            return SongData(
+                artist=artist,
+                title=title,
+                audio_path=audio_path,
+                filename=audio_path.name,
+                lines=lines,
+                album=album,
+                lyrics_source="embedded_id3_sylt",
+            )
+
         return None
+
+    def _try_lrc_in_tag(self, tags: mutagen.FileType, audio_path: Path) -> SongData | None:
+        """Extract LRC-formatted lyrics from Vorbis comments or MP4 tags."""
+        text: str | None = None
+        source: str | None = None
+
+        if isinstance(tags, mutagen.flac.FLAC | mutagen.oggvorbis.OggVorbis | mutagen.oggopus.OggOpus):
+            for key in ("lyrics", "LYRICS"):
+                values = tags.get(key)
+                if values:
+                    text = values[0]
+                    source = "embedded_vorbis"
+                    break
+        elif isinstance(tags, mutagen.mp4.MP4):
+            values = tags.get("©lyr")
+            if values:
+                text = values[0]
+                source = "embedded_mp4"
+
+        if text is None:
+            return None
+
+        lines = parse_lrc_text(text)
+        if not lines:
+            # Has lyrics text but no timestamps — unsynced only
+            logger.warning("No synced lyrics (unsynced only, skipping): %s", audio_path.name)
+            return None
+
+        artist, title, album = _read_metadata(audio_path)
+        logger.debug("Embedded %s lyrics found: %s", source, audio_path.name)
+        return SongData(
+            artist=artist,
+            title=title,
+            audio_path=audio_path,
+            filename=audio_path.name,
+            lines=lines,
+            album=album,
+            lyrics_source=source,  # type: ignore[arg-type]
+        )
 
     def _extract_sidecar_lrc(self, audio_path: Path) -> SongData | None:
         """Look for a .lrc file with the same stem and extract lyrics."""
