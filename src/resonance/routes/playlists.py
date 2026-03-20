@@ -10,13 +10,16 @@ from resonance.scanner import extract_metadata_from_filename
 
 router = APIRouter(prefix="/api")
 
+# Hardcoded container paths — user mounts host dirs here in docker-compose
+MUSIC_DIR = Path("/app/music")
+PLAYLISTS_DIR = Path("/app/playlists")
+
 
 class PlaylistRequest(BaseModel):
     """Playlist creation request."""
 
     name: str
-    data_dir: str  # root music directory (playlists written to {data_dir}/Playlists/)
-    tracks: list[str]
+    tracks: list[str]  # audio_path values (relative to /app/music)
 
 
 class PlaylistResponse(BaseModel):
@@ -46,12 +49,10 @@ def create_playlist(body: PlaylistRequest) -> PlaylistResponse:
     if not sanitized:
         raise HTTPException(status_code=400, detail="playlist name is empty or contains only special characters")
 
-    # Write m3u file to {data_dir}/Playlists/
-    playlists_dir = Path(body.data_dir) / "Playlists"
-    playlists_dir.mkdir(parents=True, exist_ok=True)
+    PLAYLISTS_DIR.mkdir(parents=True, exist_ok=True)
 
     filename = f"{sanitized}.m3u"
-    m3u_path = playlists_dir / filename
+    m3u_path = PLAYLISTS_DIR / filename
 
     lines = ["#EXTM3U"]
     for track in body.tracks:
@@ -59,7 +60,7 @@ def create_playlist(body: PlaylistRequest) -> PlaylistResponse:
         artist, title = extract_metadata_from_filename(stem)
         display = stem if artist == "Unknown" else f"{artist} - {title}"
         lines.append(f"#EXTINF:0,{display}")
-        lines.append(f"../{track}")
+        lines.append(f"../music/{track}")
 
     m3u_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

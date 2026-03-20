@@ -22,7 +22,7 @@ class IngestRequest(BaseModel):
 
     provider: str  # named provider config from conf.d/ (e.g., "ollama-bge-m3", "vyakyarth")
     collection: str  # Qdrant collection name
-    data_dir: str  # root music directory to scan
+    data_dir: str = "/app/music"  # directory to scan (default: container music mount)
     gap_threshold_sec: float | None = None
     min_chunk_lines: int | None = None
     force: bool = False

@@ -38,8 +38,8 @@ def main():
     parser.add_argument(
         "--data-dir",
         type=Path,
-        required=True,
-        help="Root music directory to scan for audio files with lyrics",
+        default=Path("/app/music"),
+        help="Root music directory to scan (default: /app/music)",
     )
     parser.add_argument(
         "--force",

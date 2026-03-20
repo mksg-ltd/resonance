@@ -13,6 +13,9 @@ services:
       - "8000:8000"
     volumes:
       - ./config:/app/config
+      # Mount your music library and playlists directory:
+      # - /path/to/music:/app/music:ro
+      # - /path/to/playlists:/app/playlists
     environment:
       - RESONANCE__DEBUG=true
       - RESONANCE__SERVE_DOCS=true
