@@ -27,6 +27,13 @@ class TestSettingsDefaults:
         assert settings.jellyfin.url is None
         assert settings.jellyfin.api_key is None
 
+    def test_playlist_defaults_to_none(self):
+        settings = Settings(
+            server={"debug": True},
+            qdrant={"url": "http://localhost:6333"},
+        )
+        assert settings.playlists.dir is None
+
 
 class TestYamlLoading:
     def test_load_from_yaml(self, tmp_path):

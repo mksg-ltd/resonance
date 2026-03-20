@@ -29,6 +29,12 @@ class ChunkingConfig(BaseModel):
     min_chunk_lines: int = 2
 
 
+class PlaylistConfig(BaseModel):
+    """Playlist generation settings."""
+
+    dir: str | None = None
+
+
 class JellyfinConfig(BaseModel):
     """Jellyfin integration (future)."""
 
@@ -84,6 +90,7 @@ class Settings(BaseSettings):
     qdrant: QdrantConfig = QdrantConfig()
     chunking: ChunkingConfig = ChunkingConfig()
     jellyfin: JellyfinConfig = JellyfinConfig()
+    playlists: PlaylistConfig = PlaylistConfig()
     server: ServerConfig = ServerConfig()
 
     @classmethod
