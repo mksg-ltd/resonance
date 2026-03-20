@@ -161,7 +161,7 @@ def run_ingest(  # noqa: PLR0913
         next_id = 1  # 0 is reserved for metadata
 
     # Embed and upsert in batches
-    batch_size = 64
+    batch_size = 32
     for i in range(0, len(chunks_to_embed), batch_size):
         batch = chunks_to_embed[i : i + batch_size]
         lyrics_texts = [c["lyrics"] for c in batch]
