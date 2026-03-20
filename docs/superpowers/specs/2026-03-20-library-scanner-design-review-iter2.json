@@ -1,0 +1,36 @@
+{
+  "pass_summary": "Iteration 2 successfully addresses 6 of the 7 original issues. The spec is substantially tighter: SongData no longer has a redundant lyrics_text field, chunk_song_data now carries its full parameter signature, SYLT binary-format handling is detailed (tuple format, ms-to-sec conversion, content_type filter), parse_lrc_text(str) is listed in the file layout, per-field metadata fallback is explicit, the lyrics truncation removal is called out directly, and the no-lyrics log level is correctly DEBUG. Two gaps remain: the spec does not define the return type or full signature of parse_lrc_text (a function it mandates adding), and the spec leaves ambiguous whether chunk_song(Path) and LrcLyric.from_file() are deleted or merely unused after the refactor.",
+  "compliance_score": "high",
+  "issues": [
+    {
+      "severity": "should_fix",
+      "category": "spec_compliance",
+      "title": "parse_lrc_text signature and return type not specified",
+      "description": "The spec adds parse_lrc_text(str) to parser.py in two places (File Layout line 190, and the embedded-lyrics extraction prose at line 105), and states it is 'used by extract_embedded'. However the spec never states the return type or full signature. The existing parse_lrc_lines(filepath: Path) -> list[LrcLine] makes the intent inferable, but the spec should be explicit so there is no ambiguity during implementation. The function also does not exist in the codebase yet — confirming this is purely a design-spec gap, not an implementation gap.",
+      "plan_requirement": "parser.py — minor change — add parse_lrc_text(str) for in-memory parsing (used by extract_embedded)",
+      "file": "/home/mk/dev/mksg/resonance/docs/superpowers/specs/2026-03-20-library-scanner-design.md",
+      "line": 190,
+      "suggested_fix": "Change the file-layout entry to: 'add parse_lrc_text(text: str) -> list[LrcLine] — parses LRC-formatted text from memory, same logic as parse_lrc_lines but accepts a string instead of a Path'. Update the prose reference at line 105 to use the same signature."
+    },
+    {
+      "severity": "should_fix",
+      "category": "spec_compliance",
+      "title": "Removal of chunk_song(Path) and LrcLyric.from_file() not made explicit in the file layout or deletion list",
+      "description": "The spec lists chunk_song_data(SongData) as replacing chunk_song(Path), and lists LrcLyric.from_file() and LrcLyric._extract_metadata() as 'What gets removed'. However the File Layout section (lines 183-193) shows chunker.py as merely updated, not what happens to chunk_song and the LrcLyric class. chunk_song is the only public entry point in chunker.py and is currently imported and called in routes/ingest.py line 12 and 101. The spec should state explicitly whether chunk_song is deleted (preferred — it becomes dead code after the refactor) and whether the LrcLyric class and its from_file/from_metadata class methods are deleted or retained. Without this, the implementer may leave dead code behind.",
+      "plan_requirement": "What gets removed: LrcLyric.from_file() and LrcLyric._extract_metadata() — scanner handles discovery and metadata",
+      "file": "/home/mk/dev/mksg/resonance/docs/superpowers/specs/2026-03-20-library-scanner-design.md",
+      "line": 180,
+      "suggested_fix": "Extend the 'What gets removed' list to include: chunk_song(Path) in chunker.py (replaced by chunk_song_data); the LrcLyric class in models.py (all its data is superseded by SongData — confirm whether the class is deleted or kept for backward-compat); the import of chunk_song in routes/ingest.py. Add a note in the File Layout section that models.py has LrcLyric removed (or kept as legacy) so the implementer knows the full scope of deletions."
+    },
+    {
+      "severity": "suggestion",
+      "category": "spec_compliance",
+      "title": "min_chunk_lines passthrough gap between chunk_song_data spec and current chunk_song implementation",
+      "description": "The spec specifies chunk_song_data(song_data, gap_threshold_sec, min_chunk_lines) at line 167 and says 'same chunking logic as today'. However the current chunk_song(filepath, gap_threshold_sec) at chunker.py line 106 does not accept or pass through min_chunk_lines to chunk_by_gaps, even though chunk_by_gaps supports it. The spec is internally consistent — chunk_song_data will add min_chunk_lines support that chunk_song never had — but this is a silent behavior change worth noting. The spec should confirm this is intentional so the implementer does not treat it as a typo.",
+      "plan_requirement": "New chunk_song_data(song_data, gap_threshold_sec, min_chunk_lines) in chunker.py — takes SongData plus chunking params, uses .lines to chunk (same chunking logic as today)",
+      "file": "/home/mk/dev/mksg/resonance/docs/superpowers/specs/2026-03-20-library-scanner-design.md",
+      "line": 167,
+      "suggested_fix": "Add a parenthetical: 'Note: chunk_song_data now passes min_chunk_lines through to chunk_by_gaps — this is a new capability not present in chunk_song, which previously ignored the IngestRequest.min_chunk_lines parameter.'"
+    }
+  ]
+}
