@@ -10,16 +10,12 @@ from resonance.scanner import extract_metadata_from_filename
 
 router = APIRouter(prefix="/api")
 
-# Hardcoded container paths — user mounts host dirs here in docker-compose
-MUSIC_DIR = Path("/app/music")
-PLAYLISTS_DIR = Path("/app/playlists")
-
 
 class PlaylistRequest(BaseModel):
     """Playlist creation request."""
 
     name: str
-    data_dir: str = "/app/music"  # mount path used during ingest (e.g., "/app/tamil")
+    data_dir: str = "/app/music"  # music directory (playlists written to {data_dir}/playlists/)
     tracks: list[str]  # audio_path values (relative to data_dir)
 
 
@@ -50,20 +46,33 @@ def create_playlist(body: PlaylistRequest) -> PlaylistResponse:
     if not sanitized:
         raise HTTPException(status_code=400, detail="playlist name is empty or contains only special characters")
 
-    PLAYLISTS_DIR.mkdir(parents=True, exist_ok=True)
+    playlists_dir = Path(body.data_dir) / "playlists"
+
+    try:
+        playlists_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Cannot create playlists directory at {playlists_dir} — is the volume mounted read-only? ({e})",
+        ) from e
 
     filename = f"{sanitized}.m3u"
-    m3u_path = PLAYLISTS_DIR / filename
+    m3u_path = playlists_dir / filename
 
-    mount_name = Path(body.data_dir).name
     lines = ["#EXTM3U"]
     for track in body.tracks:
         stem = Path(track).stem
         artist, title = extract_metadata_from_filename(stem)
         display = stem if artist == "Unknown" else f"{artist} - {title}"
         lines.append(f"#EXTINF:0,{display}")
-        lines.append(f"../{mount_name}/{track}")
+        lines.append(f"../{track}")
 
-    m3u_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    try:
+        m3u_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except OSError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Cannot write playlist to {m3u_path} — check volume permissions. ({e})",
+        ) from e
 
     return PlaylistResponse(name=sanitized, filename=filename, track_count=len(body.tracks))

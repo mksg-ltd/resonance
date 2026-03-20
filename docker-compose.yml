@@ -12,7 +12,10 @@ services:
       - "8000:8000"
     volumes:
       - ./config:/app/config:ro
-      - /data/media/music/english:/data/media/music/english:ro
+      - /home/mk/mnt/homelab-data/media/music/tamil:/app/music/tamil:ro
+      - /home/mk/mnt/homelab-data/media/music/english:/app/music/english:ro
+      - /home/mk/mnt/homelab-data/media/music/tamil/playlists:/app/music/tamil/playlists:rw
+      - /home/mk/mnt/homelab-data/media/music/english/playlists:/app/music/english/playlists:rw
     environment:
       - RESONANCE__SERVER__DEBUG=true
       - RESONANCE__QDRANT__URL=http://qdrant:6333
@@ -30,3 +33,15 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+  # HuggingFace Text Embeddings Inference — serves any HF embedding model
+  # with an OpenAI-compatible API. Use for models that can't run on Ollama
+  # (e.g., XLM-RoBERTa-based models like Vyakyarth).
+  tei:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
+    ports:
+      - "8085:80"
+    volumes:
+      - ./tei_cache:/data
+    environment:
+      - MODEL_ID=krutrim-ai-labs/Vyakyarth
+      - MAX_BATCH_TOKENS=16384
