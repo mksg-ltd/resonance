@@ -23,6 +23,7 @@ class IngestRequest(BaseModel):
     provider: str  # named provider config from conf.d/ (e.g., "ollama-bge-m3", "vyakyarth")
     collection: str  # Qdrant collection name
     data_dir: str = "/app/music"  # directory to scan (default: container music mount)
+    batch_size: int = 64  # embedding batch size (TEI max is 32, OpenAI supports 2048)
     gap_threshold_sec: float | None = None
     min_chunk_lines: int | None = None
     force: bool = False
@@ -58,6 +59,7 @@ def run_ingest(  # noqa: PLR0913
     *,
     config_name: str = "",
     collection: str | None = None,
+    batch_size: int | None = None,
     gap_threshold_sec: float | None = None,
     min_chunk_lines: int | None = None,
     force: bool = False,
@@ -161,7 +163,7 @@ def run_ingest(  # noqa: PLR0913
         next_id = 1  # 0 is reserved for metadata
 
     # Embed and upsert in batches
-    batch_size = 32
+    batch_size = batch_size or 64
     for i in range(0, len(chunks_to_embed), batch_size):
         batch = chunks_to_embed[i : i + batch_size]
         lyrics_texts = [c["lyrics"] for c in batch]
@@ -261,6 +263,7 @@ def ingest(body: IngestRequest, request: Request) -> IngestResponse:
         settings=request.app.state.settings,
         config_name=body.provider,
         collection=body.collection,
+        batch_size=body.batch_size,
         gap_threshold_sec=body.gap_threshold_sec,
         min_chunk_lines=body.min_chunk_lines,
         force=body.force,

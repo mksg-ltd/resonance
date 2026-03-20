@@ -1,4 +1,3 @@
-# Ollama embedding provider configuration
-# Copy to ollama.yaml and adjust as needed.
+type: ollama
 base_url: http://localhost:11434
 model: bge-m3
