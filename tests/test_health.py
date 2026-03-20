@@ -8,7 +8,6 @@ class TestHealthEndpoint:
         data = response.json()
         assert data["status"] == "healthy"
         assert data["qdrant"] == "connected"
-        assert data["provider"] == "openai"
 
     def test_unhealthy_when_qdrant_unreachable(self, test_app, mock_qdrant):
         mock_qdrant.get_collections.side_effect = ConnectionError("refused")

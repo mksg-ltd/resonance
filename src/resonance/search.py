@@ -2,8 +2,8 @@
 Search lyrics in Qdrant by semantic similarity.
 
 Usage:
-    python -m resonance.search "your query here"
-    python -m resonance.search "your query" --artist "Coldplay"
+    resonance-search --provider ollama-bge-m3 "songs about letting go"
+    resonance-search --provider ollama-bge-m3 "love" --artist "Coldplay"
 """
 
 from argparse import ArgumentParser
@@ -11,27 +11,33 @@ from argparse import ArgumentParser
 from qdrant_client import QdrantClient
 
 from .config import load_settings
-from .embedders import create_embedder
+from .embedders import create_embedder_for_name
 from .routes.search import run_search
 
 
 def main():
     parser = ArgumentParser(description="Search lyrics by semantic similarity")
     parser.add_argument("query", help="Natural language query")
+    parser.add_argument(
+        "--provider",
+        required=True,
+        help="Named provider config from conf.d/ (e.g., 'ollama-bge-m3', 'vyakyarth')",
+    )
+    parser.add_argument("--collection", help="Qdrant collection name (default: from config)")
     parser.add_argument("--artist", help="Filter by artist name")
     parser.add_argument("--limit", type=int, default=15, help="Number of results")
     args = parser.parse_args()
 
     settings = load_settings()
-    embedder = create_embedder(settings)
+    embedder = create_embedder_for_name(args.provider)
     qdrant = QdrantClient(
         url=settings.qdrant.url,
         api_key=settings.qdrant.api_key.get_secret_value() if settings.qdrant.api_key else None,
     )
 
-    collection = settings.qdrant.collection
+    collection = args.collection or settings.qdrant.collection
     print(f'\nQuery: "{args.query}"')
-    print(f"Collection: {collection} | Model: {embedder.model_name}")
+    print(f"Collection: {collection} | Provider: {args.provider} | Model: {embedder.model_name}")
     if args.artist:
         print(f"Filter: artist = {args.artist}")
 

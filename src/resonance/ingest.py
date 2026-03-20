@@ -4,8 +4,8 @@ Ingest song lyrics into Qdrant.
 Pipeline: scan audio files → extract lyrics (embedded/sidecar) → chunk → embed → store in Qdrant
 
 Usage:
-    python -m resonance.ingest
-    python -m resonance.ingest --gap 10
+    resonance-ingest --provider ollama-bge-m3
+    resonance-ingest --provider vyakyarth --collection tamil-lyrics
 """
 
 from argparse import ArgumentParser
@@ -14,12 +14,17 @@ from pathlib import Path
 from qdrant_client import QdrantClient
 
 from .config import load_settings
-from .embedders import create_embedder
+from .embedders import create_embedder_for_name
 from .routes.ingest import run_ingest
 
 
 def main():
-    parser = ArgumentParser(description="Ingest LRC lyrics into Qdrant")
+    parser = ArgumentParser(description="Ingest song lyrics into Qdrant")
+    parser.add_argument(
+        "--provider",
+        required=True,
+        help="Named provider config from conf.d/ (e.g., 'ollama-bge-m3', 'vyakyarth')",
+    )
     parser.add_argument(
         "--collection",
         help="Qdrant collection name (default: from config)",
@@ -42,7 +47,7 @@ def main():
     args = parser.parse_args()
 
     settings = load_settings()
-    embedder = create_embedder(settings)
+    embedder = create_embedder_for_name(args.provider)
     qdrant = QdrantClient(
         url=settings.qdrant.url,
         api_key=settings.qdrant.api_key.get_secret_value() if settings.qdrant.api_key else None,
@@ -50,7 +55,7 @@ def main():
 
     collection = args.collection or settings.qdrant.collection
     print(
-        f"Config: collection={collection}, provider={embedder.provider_name}, "
+        f"Config: collection={collection}, provider={args.provider}, "
         f"model={embedder.model_name} ({embedder.dimensions}d), "
         f"gap={args.gap or settings.chunking.gap_threshold_sec}s"
     )
@@ -60,10 +65,11 @@ def main():
         qdrant=qdrant,
         embedder=embedder,
         settings=settings,
+        config_name=args.provider,
         collection=args.collection,
         gap_threshold_sec=args.gap,
         force=args.force,
-        data_dir=args.data_dir,
+        data_dir=args.data_dir or (Path(settings.data_dir) if settings.data_dir else None),
     )
 
     if result.files_processed == 0 and result.chunks_created == 0 and result.skipped == 0:

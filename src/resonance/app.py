@@ -12,7 +12,6 @@ from fastapi.staticfiles import StaticFiles
 from qdrant_client import QdrantClient
 
 from resonance.config import Settings, load_settings
-from resonance.embedders import create_embedder
 from resonance.routes.collections import router as collections_router
 from resonance.routes.config import router as config_router
 from resonance.routes.health import router as health_router
@@ -32,13 +31,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         api_key=settings.qdrant.api_key.get_secret_value() if settings.qdrant.api_key else None,
     )
     app.state.qdrant = qdrant
-
-    # Initialize embedder (may fail if provider config missing — that's OK at startup)
-    try:
-        app.state.embedder = create_embedder(settings)
-    except ValueError:
-        logger.warning("Embedder not configured — search and ingest endpoints will fail until provider is set up")
-        app.state.embedder = None
 
     yield
     qdrant.close()

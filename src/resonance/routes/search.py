@@ -1,6 +1,6 @@
 """Search endpoint — semantic lyric search via Qdrant."""
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from qdrant_client import QdrantClient
 from qdrant_client.models import FieldCondition, Filter, MatchValue
@@ -89,33 +89,33 @@ def run_search(  # noqa: PLR0913
     return sorted(seen.values(), key=lambda r: r.score, reverse=True)[:limit]
 
 
-def _get_collection_metadata(qdrant: QdrantClient, collection: str) -> tuple[str | None, str | None]:
-    """Read provider and model from collection metadata (point id=0)."""
+def _get_collection_config_name(qdrant: QdrantClient, collection: str) -> str | None:
+    """Read the provider config name from collection metadata (point id=0)."""
     try:
         points = qdrant.retrieve(collection_name=collection, ids=[0])
         if points and points[0].payload and points[0].payload.get("_metadata"):
-            return points[0].payload.get("provider"), points[0].payload.get("model")
+            return points[0].payload.get("config_name")
     except Exception:  # noqa: BLE001
         pass
-    return None, None
+    return None
 
 
 @router.post("/search", response_model=SearchResponse)
 def search(body: SearchRequest, request: Request) -> SearchResponse:
     """Semantic lyric search. Auto-selects embedder based on collection metadata."""
-    from resonance.embedders import get_embedder_for_provider
+    from resonance.embedders import create_embedder_for_name
 
     settings = request.app.state.settings
     collection = body.collection or settings.qdrant.collection
     qdrant = request.app.state.qdrant
 
     # Pick the right embedder for this collection
-    stored_provider, stored_model = _get_collection_metadata(qdrant, collection)
-    embedder = (
-        get_embedder_for_provider(stored_provider, model=stored_model)
-        if stored_provider
-        else request.app.state.embedder
-    )
+    config_name = _get_collection_config_name(qdrant, collection)
+    if not config_name:
+        msg = f"Collection '{collection}' has no config_name in metadata. Re-ingest with --provider to fix."
+        raise HTTPException(status_code=400, detail=msg)
+
+    embedder = create_embedder_for_name(config_name)
 
     results = run_search(
         qdrant=qdrant,

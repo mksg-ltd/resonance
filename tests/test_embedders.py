@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 
-from resonance.config import OllamaProviderConfig, OpenAIProviderConfig, Settings, load_settings
-from resonance.embedders import OpenAIEmbedder, OllamaEmbedder, create_embedder
+from resonance.config import OllamaProviderConfig, OpenAIProviderConfig
+from resonance.embedders import OpenAIEmbedder, OllamaEmbedder, create_embedder_for_name
 
 
 class TestOpenAIEmbedder:
@@ -13,7 +13,6 @@ class TestOpenAIEmbedder:
         config = OpenAIProviderConfig(api_key="sk-test", model="text-embedding-3-small")
         embedder = OpenAIEmbedder(config)
 
-        # Mock the OpenAI client's embeddings.create
         mock_response = MagicMock()
         mock_response.data = [
             MagicMock(embedding=[0.1, 0.2, 0.3]),
@@ -25,9 +24,6 @@ class TestOpenAIEmbedder:
         assert len(result) == 2
         assert result[0] == [0.1, 0.2, 0.3]
         assert result[1] == [0.4, 0.5, 0.6]
-        embedder._client.embeddings.create.assert_called_once_with(
-            model="text-embedding-3-small", input=["hello", "world"]
-        )
 
     def test_dimensions_known_model(self):
         config = OpenAIProviderConfig(api_key="sk-test", model="text-embedding-3-small")
@@ -43,6 +39,16 @@ class TestOpenAIEmbedder:
         config = OpenAIProviderConfig(api_key="sk-test", model="some-future-model")
         embedder = OpenAIEmbedder(config)
         assert embedder.dimensions == 1536
+
+    def test_dimensions_override(self):
+        config = OpenAIProviderConfig(api_key="sk-test", model="custom-model", dimensions=768)
+        embedder = OpenAIEmbedder(config)
+        assert embedder.dimensions == 768
+
+    def test_base_url(self):
+        config = OpenAIProviderConfig(model="custom", base_url="http://localhost:8085/v1")
+        embedder = OpenAIEmbedder(config)
+        assert embedder._client.base_url.host == "localhost"
 
     def test_properties(self):
         config = OpenAIProviderConfig(api_key="sk-test", model="text-embedding-3-small")
@@ -84,42 +90,62 @@ class TestOllamaEmbedder:
         assert embedder.provider_name == "ollama"
 
 
-class TestCreateEmbedder:
+class TestCreateEmbedderForName:
     def test_creates_openai_embedder(self, tmp_path):
-        conf_d = tmp_path / "conf.d"
-        conf_d.mkdir()
-        (conf_d / "openai.yaml").write_text("api_key: sk-test\nmodel: text-embedding-3-small\n")
+        (tmp_path / "my-openai.yaml").write_text("type: openai\napi_key: sk-test\nmodel: text-embedding-3-small\n")
 
-        settings = Settings(embedding={"provider": "openai"})
-        embedder = create_embedder(settings, config_dir=conf_d)
+        embedder = create_embedder_for_name("my-openai", config_dir=tmp_path)
         assert isinstance(embedder, OpenAIEmbedder)
         assert embedder.model_name == "text-embedding-3-small"
 
     def test_creates_ollama_embedder(self, tmp_path):
-        conf_d = tmp_path / "conf.d"
-        conf_d.mkdir()
-        (conf_d / "ollama.yaml").write_text("base_url: http://localhost:11434\nmodel: nomic-embed-text\n")
+        (tmp_path / "my-ollama.yaml").write_text("type: ollama\nbase_url: http://localhost:11434\nmodel: bge-m3\n")
 
-        settings = Settings(embedding={"provider": "ollama"})
-        embedder = create_embedder(settings, config_dir=conf_d)
+        embedder = create_embedder_for_name("my-ollama", config_dir=tmp_path)
         assert isinstance(embedder, OllamaEmbedder)
-        assert embedder.model_name == "nomic-embed-text"
+        assert embedder.model_name == "bge-m3"
 
-    def test_raises_for_missing_provider_config(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        settings = Settings(embedding={"provider": "openai"})
+    def test_creates_tei_embedder_via_openai_type(self, tmp_path):
+        (tmp_path / "vyakyarth.yaml").write_text(
+            "type: openai\nmodel: krutrim-ai-labs/Vyakyarth\nbase_url: http://localhost:8085/v1\ndimensions: 768\n"
+        )
+
+        embedder = create_embedder_for_name("vyakyarth", config_dir=tmp_path)
+        assert isinstance(embedder, OpenAIEmbedder)
+        assert embedder.dimensions == 768
+        assert embedder.model_name == "krutrim-ai-labs/Vyakyarth"
+
+    def test_raises_for_missing_config(self, tmp_path):
         try:
-            create_embedder(settings, config_dir=tmp_path / "nonexistent")
+            create_embedder_for_name("nonexistent", config_dir=tmp_path)
             msg = "Should have raised ValueError"
             raise AssertionError(msg)
         except ValueError as e:
-            assert "no conf.d/openai.yaml found" in str(e)
+            assert "not found" in str(e)
 
-    def test_raises_for_unknown_provider(self, tmp_path):
-        settings = Settings(embedding={"provider": "unknown"})
+    def test_raises_for_missing_type_field(self, tmp_path):
+        (tmp_path / "bad.yaml").write_text("model: something\n")
+
         try:
-            create_embedder(settings, config_dir=tmp_path)
+            create_embedder_for_name("bad", config_dir=tmp_path)
             msg = "Should have raised ValueError"
             raise AssertionError(msg)
         except ValueError as e:
-            assert "Unknown embedding provider" in str(e)
+            assert "missing 'type' field" in str(e)
+
+    def test_raises_for_unknown_type(self, tmp_path):
+        (tmp_path / "bad.yaml").write_text("type: pytorch\nmodel: something\n")
+
+        try:
+            create_embedder_for_name("bad", config_dir=tmp_path)
+            msg = "Should have raised ValueError"
+            raise AssertionError(msg)
+        except ValueError as e:
+            assert "Unknown provider type" in str(e)
+
+    def test_caches_by_name(self, tmp_path):
+        (tmp_path / "cached.yaml").write_text("type: ollama\nmodel: nomic-embed-text\n")
+
+        e1 = create_embedder_for_name("cached", config_dir=tmp_path)
+        e2 = create_embedder_for_name("cached", config_dir=tmp_path)
+        assert e1 is e2

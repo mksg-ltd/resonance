@@ -10,7 +10,6 @@ router = APIRouter()
 def health(request: Request) -> JSONResponse:
     """Check service health — Qdrant connectivity and config status."""
     qdrant = request.app.state.qdrant
-    provider = request.app.state.settings.embedding.provider
 
     try:
         qdrant.get_collections()
@@ -25,6 +24,5 @@ def health(request: Request) -> JSONResponse:
         content={
             "status": "healthy" if status_code == 200 else "unhealthy",
             "qdrant": qdrant_status,
-            "provider": provider,
         },
     )

@@ -3,6 +3,8 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from resonance.app import create_app
@@ -19,7 +21,10 @@ def _make_test_client(debug: bool = True) -> tuple[TestClient, MagicMock, MagicM
 
     mock_qdrant = MagicMock()
     mock_qdrant.get_collections.return_value = MagicMock(collections=[])
-    mock_qdrant.retrieve.return_value = []  # No metadata point — use default embedder
+    # Collection metadata with config_name for search auto-detection
+    meta_point = MagicMock()
+    meta_point.payload = {"_metadata": True, "config_name": "test-provider", "provider": "openai", "model": "text-embedding-3-small", "dimensions": 1536}
+    mock_qdrant.retrieve.return_value = [meta_point]
     app.state.qdrant = mock_qdrant
 
     mock_embedder = MagicMock()
@@ -27,12 +32,22 @@ def _make_test_client(debug: bool = True) -> tuple[TestClient, MagicMock, MagicM
     mock_embedder.dimensions = 1536
     mock_embedder.model_name = "text-embedding-3-small"
     mock_embedder.provider_name = "openai"
-    app.state.embedder = mock_embedder
 
     return TestClient(app), mock_qdrant, mock_embedder
 
 
 class TestSearchRoute:
+    @pytest.fixture(autouse=True)
+    def _mock_embedder_factory(self):
+        """Mock create_embedder_for_name so search tests don't need real conf.d files."""
+        mock_embedder = MagicMock()
+        mock_embedder.embed.return_value = [[0.1, 0.2, 0.3]]
+        mock_embedder.dimensions = 1536
+        mock_embedder.model_name = "text-embedding-3-small"
+        mock_embedder.provider_name = "openai"
+        with patch("resonance.embedders.create_embedder_for_name", return_value=mock_embedder):
+            yield
+
     def test_search_returns_results(self):
         client, mock_qdrant, mock_embedder = _make_test_client()
 
@@ -235,7 +250,6 @@ class TestConfigRoute:
         response = client.get("/api/config")
         assert response.status_code == 200
         data = response.json()
-        assert data["embedding"]["provider"] == "openai"
         assert data["qdrant"]["collection"] == "test_lyrics"
         assert data["server"]["debug"] is True
 
@@ -246,7 +260,6 @@ class TestConfigRoute:
         )
         app = create_app(settings=settings)
         app.state.qdrant = MagicMock()
-        app.state.embedder = MagicMock()
         client = TestClient(app)
 
         response = client.get("/api/config")

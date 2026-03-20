@@ -10,6 +10,7 @@ from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from resonance.chunker import chunk_song_data
 from resonance.config import Settings
+from resonance.embedders import create_embedder_for_name
 from resonance.embedders.base import EmbeddingProvider
 from resonance.scanner import LibraryScanner
 
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/api")
 class IngestRequest(BaseModel):
     """Ingest request body."""
 
+    provider: str  # named provider config from conf.d/ (e.g., "ollama-bge-m3", "vyakyarth")
     collection: str | None = None
     gap_threshold_sec: float | None = None
     min_chunk_lines: int | None = None
@@ -53,6 +55,7 @@ def run_ingest(  # noqa: PLR0913
     embedder: EmbeddingProvider,
     settings: Settings,
     *,
+    config_name: str = "",
     collection: str | None = None,
     gap_threshold_sec: float | None = None,
     min_chunk_lines: int | None = None,
@@ -107,7 +110,7 @@ def run_ingest(  # noqa: PLR0913
             collection_name=collection,
             vectors_config=VectorParams(size=embedder.dimensions, distance=Distance.COSINE),
         )
-        _store_collection_metadata(qdrant, collection, embedder)
+        _store_collection_metadata(qdrant, collection, embedder, config_name)
 
     # Get already-ingested audio paths for incremental mode
     existing_paths = _get_existing_audio_paths(qdrant, collection) if collection_exists else set()
@@ -221,7 +224,9 @@ def _get_stored_model(qdrant: QdrantClient, collection: str) -> str | None:
     return None
 
 
-def _store_collection_metadata(qdrant: QdrantClient, collection: str, embedder: EmbeddingProvider) -> None:
+def _store_collection_metadata(
+    qdrant: QdrantClient, collection: str, embedder: EmbeddingProvider, config_name: str
+) -> None:
     """Store provider/model/dimensions as a metadata point in the collection."""
     zero_vector = [0.0] * embedder.dimensions
     qdrant.upsert(
@@ -232,6 +237,7 @@ def _store_collection_metadata(qdrant: QdrantClient, collection: str, embedder: 
                 vector=zero_vector,
                 payload={
                     "_metadata": True,
+                    "config_name": config_name,
                     "provider": embedder.provider_name,
                     "model": embedder.model_name,
                     "dimensions": embedder.dimensions,
@@ -244,12 +250,15 @@ def _store_collection_metadata(qdrant: QdrantClient, collection: str, embedder: 
 @router.post("/ingest", response_model=IngestResponse)
 def ingest(body: IngestRequest, request: Request) -> IngestResponse:
     """Trigger LRC ingestion pipeline."""
-    collection = body.collection or request.app.state.settings.qdrant.collection
     settings = request.app.state.settings
+    collection = body.collection or settings.qdrant.collection
+    embedder = create_embedder_for_name(body.provider)
+
     result = run_ingest(
         qdrant=request.app.state.qdrant,
-        embedder=request.app.state.embedder,
+        embedder=embedder,
         settings=settings,
+        config_name=body.provider,
         collection=body.collection,
         gap_threshold_sec=body.gap_threshold_sec,
         min_chunk_lines=body.min_chunk_lines,
@@ -264,5 +273,5 @@ def ingest(body: IngestRequest, request: Request) -> IngestResponse:
         skipped=result.skipped,
         model_mismatch=result.model_mismatch,
         stored_model=result.stored_model,
-        active_model=request.app.state.embedder.model_name if result.model_mismatch else None,
+        active_model=embedder.model_name if result.model_mismatch else None,
     )

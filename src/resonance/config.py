@@ -8,12 +8,6 @@ from pydantic import BaseModel, SecretStr
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 
-class EmbeddingConfig(BaseModel):
-    """Which embedding provider to use."""
-
-    provider: str = "openai"
-
-
 class QdrantConfig(BaseModel):
     """Qdrant vector database connection."""
 
@@ -93,7 +87,6 @@ class Settings(BaseSettings):
     )
 
     data_dir: str | None = None  # root music directory (used by ingest + playlists)
-    embedding: EmbeddingConfig = EmbeddingConfig()
     qdrant: QdrantConfig = QdrantConfig()
     chunking: ChunkingConfig = ChunkingConfig()
     jellyfin: JellyfinConfig = JellyfinConfig()
@@ -159,11 +152,17 @@ def _load_yaml(path: Path) -> dict:
 
 
 def load_provider_config(
-    provider: str, config_dir: Path | None = None
-) -> OpenAIProviderConfig | OllamaProviderConfig | None:
-    """Load provider-specific config from conf.d/{provider}.yaml.
+    name: str, config_dir: Path | None = None
+) -> tuple[str, OpenAIProviderConfig | OllamaProviderConfig]:
+    """Load a named provider config from conf.d/{name}.yaml.
+
+    Each config file must have a `type` field ("openai" or "ollama") that
+    determines which provider class to use. The filename is the config name.
 
     Searches: explicit config_dir → conf.d/ → config/conf.d/ → ~/.config/resonance/conf.d/
+
+    Returns (provider_type, config) tuple.
+    Raises ValueError if config file not found or type is unknown.
     """
     search_dirs = []
     if config_dir:
@@ -178,16 +177,22 @@ def load_provider_config(
 
     for search_dir in search_dirs:
         for ext in ("yaml", "yml"):
-            provider_file = search_dir / f"{provider}.{ext}"
+            provider_file = search_dir / f"{name}.{ext}"
             if provider_file.is_file():
                 data = _load_yaml(provider_file)
-                if provider == "openai":
-                    return OpenAIProviderConfig(**data)
-                if provider == "ollama":
-                    return OllamaProviderConfig(**data)
-                return None
+                provider_type = data.pop("type", None)
+                if provider_type is None:
+                    msg = f"conf.d/{name}.yaml missing 'type' field (must be 'openai' or 'ollama')"
+                    raise ValueError(msg)
+                if provider_type == "openai":
+                    return provider_type, OpenAIProviderConfig(**data)
+                if provider_type == "ollama":
+                    return provider_type, OllamaProviderConfig(**data)
+                msg = f"Unknown provider type '{provider_type}' in conf.d/{name}.yaml. Supported: openai, ollama"
+                raise ValueError(msg)
 
-    return None
+    msg = f"Provider config '{name}' not found. Create conf.d/{name}.yaml with a 'type' field."
+    raise ValueError(msg)
 
 
 def load_settings(config_path: Path | None = None) -> Settings:

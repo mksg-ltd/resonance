@@ -2,6 +2,8 @@
 
 import os
 
+import pytest
+
 from resonance.config import (
     OllamaProviderConfig,
     OpenAIProviderConfig,
@@ -14,13 +16,13 @@ from resonance.config import (
 class TestSettingsDefaults:
     def test_default_settings(self):
         settings = Settings()
-        assert settings.embedding.provider == "openai"
         assert settings.qdrant.url == "http://localhost:6333"
         assert settings.qdrant.collection == "lyrics"
         assert settings.chunking.gap_threshold_sec == 10.0
         assert settings.chunking.min_chunk_lines == 2
         assert settings.server.port == 8000
         assert settings.server.debug is False
+        assert settings.data_dir is None
 
     def test_jellyfin_defaults_to_none(self):
         settings = Settings()
@@ -28,10 +30,7 @@ class TestSettingsDefaults:
         assert settings.jellyfin.api_key is None
 
     def test_playlist_defaults_to_none(self):
-        settings = Settings(
-            server={"debug": True},
-            qdrant={"url": "http://localhost:6333"},
-        )
+        settings = Settings()
         assert settings.playlists.dir is None
 
 
@@ -39,8 +38,6 @@ class TestYamlLoading:
     def test_load_from_yaml(self, tmp_path):
         config_file = tmp_path / "config.yaml"
         config_file.write_text("""
-embedding:
-  provider: ollama
 qdrant:
   url: http://qdrant:6333
   collection: test_lyrics
@@ -50,7 +47,6 @@ server:
   debug: true
 """)
         settings = load_settings(config_path=config_file)
-        assert settings.embedding.provider == "ollama"
         assert settings.qdrant.url == "http://qdrant:6333"
         assert settings.qdrant.collection == "test_lyrics"
         assert settings.chunking.gap_threshold_sec == 8.0
@@ -59,17 +55,16 @@ server:
     def test_partial_yaml_uses_defaults(self, tmp_path):
         config_file = tmp_path / "config.yaml"
         config_file.write_text("""
-embedding:
-  provider: ollama
+qdrant:
+  url: http://custom:6333
 """)
         settings = load_settings(config_path=config_file)
-        assert settings.embedding.provider == "ollama"
-        assert settings.qdrant.url == "http://localhost:6333"
+        assert settings.qdrant.url == "http://custom:6333"
         assert settings.server.port == 8000
 
     def test_missing_config_uses_defaults(self, tmp_path):
         settings = load_settings(config_path=tmp_path / "nonexistent.yaml")
-        assert settings.embedding.provider == "openai"
+        assert settings.qdrant.url == "http://localhost:6333"
 
     def test_env_var_expansion_in_yaml(self, tmp_path, monkeypatch):
         monkeypatch.setenv("TEST_QDRANT_URL", "http://custom:6333")
@@ -102,53 +97,50 @@ qdrant:
 class TestProviderConfig:
     def test_load_openai_config(self, tmp_path, monkeypatch):
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-123")
-        conf_d = tmp_path / "conf.d"
-        conf_d.mkdir()
-        (conf_d / "openai.yaml").write_text("""
-api_key: ${OPENAI_API_KEY}
-model: text-embedding-3-large
-""")
-        config = load_provider_config("openai", config_dir=conf_d)
+        (tmp_path / "openai.yaml").write_text("type: openai\napi_key: ${OPENAI_API_KEY}\nmodel: text-embedding-3-large\n")
+
+        provider_type, config = load_provider_config("openai", config_dir=tmp_path)
+        assert provider_type == "openai"
         assert isinstance(config, OpenAIProviderConfig)
         assert config.api_key.get_secret_value() == "sk-test-key-123"
         assert config.model == "text-embedding-3-large"
 
     def test_load_ollama_config(self, tmp_path):
-        conf_d = tmp_path / "conf.d"
-        conf_d.mkdir()
-        (conf_d / "ollama.yaml").write_text("""
-base_url: http://ollama:11434
-model: mxbai-embed-large
-""")
-        config = load_provider_config("ollama", config_dir=conf_d)
+        (tmp_path / "ollama-bge.yaml").write_text("type: ollama\nbase_url: http://ollama:11434\nmodel: bge-m3\n")
+
+        provider_type, config = load_provider_config("ollama-bge", config_dir=tmp_path)
+        assert provider_type == "ollama"
         assert isinstance(config, OllamaProviderConfig)
         assert config.base_url == "http://ollama:11434"
-        assert config.model == "mxbai-embed-large"
+        assert config.model == "bge-m3"
 
-    def test_missing_provider_config_returns_none(self, tmp_path, monkeypatch):
+    def test_missing_provider_config_raises(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        config = load_provider_config("openai", config_dir=tmp_path / "nonexistent")
-        assert config is None
+        with pytest.raises(ValueError, match="not found"):
+            load_provider_config("nonexistent", config_dir=tmp_path / "nope")
 
-    def test_unknown_provider_returns_none(self, tmp_path):
-        conf_d = tmp_path / "conf.d"
-        conf_d.mkdir()
-        (conf_d / "unknown.yaml").write_text("key: value")
-        config = load_provider_config("unknown", config_dir=conf_d)
-        assert config is None
+    def test_missing_type_field_raises(self, tmp_path):
+        (tmp_path / "bad.yaml").write_text("model: something\n")
+        with pytest.raises(ValueError, match="missing 'type' field"):
+            load_provider_config("bad", config_dir=tmp_path)
+
+    def test_unknown_type_raises(self, tmp_path):
+        (tmp_path / "bad.yaml").write_text("type: pytorch\nmodel: something\n")
+        with pytest.raises(ValueError, match="Unknown provider type"):
+            load_provider_config("bad", config_dir=tmp_path)
 
 
 class TestConfigDiscovery:
     def test_env_var_config_path(self, tmp_path, monkeypatch):
         config_file = tmp_path / "custom.yaml"
         config_file.write_text("""
-embedding:
-  provider: ollama
+qdrant:
+  url: http://custom:6333
 """)
         monkeypatch.setenv("RESONANCE_CONFIG", str(config_file))
         monkeypatch.chdir(tmp_path)
         settings = load_settings()
-        assert settings.embedding.provider == "ollama"
+        assert settings.qdrant.url == "http://custom:6333"
 
     def test_local_config_yaml(self, tmp_path, monkeypatch):
         config_file = tmp_path / "config.yaml"
@@ -157,7 +149,6 @@ server:
   port: 9999
 """)
         monkeypatch.chdir(tmp_path)
-        # Clear any RESONANCE_CONFIG env var
         monkeypatch.delenv("RESONANCE_CONFIG", raising=False)
         settings = load_settings()
         assert settings.server.port == 9999
