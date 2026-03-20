@@ -17,17 +17,10 @@ class TestSettingsDefaults:
     def test_default_settings(self):
         settings = Settings()
         assert settings.qdrant.url == "http://localhost:6333"
-        assert settings.qdrant.collection == "lyrics"
         assert settings.chunking.gap_threshold_sec == 10.0
         assert settings.chunking.min_chunk_lines == 2
-        assert settings.server.port == 8000
-        assert settings.server.debug is False
+        assert settings.debug is False
         assert settings.data_dir is None
-
-    def test_jellyfin_defaults_to_none(self):
-        settings = Settings()
-        assert settings.jellyfin.url is None
-        assert settings.jellyfin.api_key is None
 
     def test_playlist_defaults_to_none(self):
         settings = Settings()
@@ -40,17 +33,14 @@ class TestYamlLoading:
         config_file.write_text("""
 qdrant:
   url: http://qdrant:6333
-  collection: test_lyrics
 chunking:
   gap_threshold_sec: 8.0
-server:
-  debug: true
+debug: true
 """)
         settings = load_settings(config_path=config_file)
         assert settings.qdrant.url == "http://qdrant:6333"
-        assert settings.qdrant.collection == "test_lyrics"
         assert settings.chunking.gap_threshold_sec == 8.0
-        assert settings.server.debug is True
+        assert settings.debug is True
 
     def test_partial_yaml_uses_defaults(self, tmp_path):
         config_file = tmp_path / "config.yaml"
@@ -60,7 +50,7 @@ qdrant:
 """)
         settings = load_settings(config_path=config_file)
         assert settings.qdrant.url == "http://custom:6333"
-        assert settings.server.port == 8000
+        assert settings.debug is False
 
     def test_missing_config_uses_defaults(self, tmp_path):
         settings = load_settings(config_path=tmp_path / "nonexistent.yaml")
@@ -89,9 +79,9 @@ qdrant:
         assert settings.qdrant.url == "http://env-qdrant:6333"
 
     def test_env_var_overrides_default(self, monkeypatch):
-        monkeypatch.setenv("RESONANCE__SERVER__PORT", "9000")
+        monkeypatch.setenv("RESONANCE__DEBUG", "true")
         settings = Settings()
-        assert settings.server.port == 9000
+        assert settings.debug is True
 
 
 class TestProviderConfig:
@@ -145,10 +135,9 @@ qdrant:
     def test_local_config_yaml(self, tmp_path, monkeypatch):
         config_file = tmp_path / "config.yaml"
         config_file.write_text("""
-server:
-  port: 9999
+debug: true
 """)
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("RESONANCE_CONFIG", raising=False)
         settings = load_settings()
-        assert settings.server.port == 9999
+        assert settings.debug is True

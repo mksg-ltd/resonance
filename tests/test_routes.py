@@ -14,8 +14,8 @@ from resonance.config import Settings
 def _make_test_client(debug: bool = True) -> tuple[TestClient, MagicMock, MagicMock]:
     """Create a test client with mocked Qdrant and embedder."""
     settings = Settings(
-        server={"debug": debug},
-        qdrant={"url": "http://localhost:6333", "collection": "test_lyrics"},
+        debug=debug,
+        qdrant={"url": "http://localhost:6333"},
     )
     app = create_app(settings=settings)
 
@@ -68,7 +68,7 @@ class TestSearchRoute:
         }
         mock_qdrant.query_points.return_value = MagicMock(points=[mock_point])
 
-        response = client.post("/api/search", json={"query": "songs about hope"})
+        response = client.post("/api/search", json={"query": "songs about hope", "collection": "test_lyrics"})
         assert response.status_code == 200
         data = response.json()
         assert data["query"] == "songs about hope"
@@ -82,7 +82,7 @@ class TestSearchRoute:
         client, mock_qdrant, mock_embedder = _make_test_client()
         mock_qdrant.query_points.return_value = MagicMock(points=[])
 
-        response = client.post("/api/search", json={"query": "love", "artist": "Adele"})
+        response = client.post("/api/search", json={"query": "love", "collection": "test_lyrics", "artist": "Adele"})
         assert response.status_code == 200
 
         # Verify filter was passed to Qdrant
@@ -123,7 +123,7 @@ class TestSearchRoute:
         }
         mock_qdrant.query_points.return_value = MagicMock(points=[point1, point2])
 
-        response = client.post("/api/search", json={"query": "hope"})
+        response = client.post("/api/search", json={"query": "hope", "collection": "test_lyrics"})
         data = response.json()
         # Should deduplicate — only one result for "Fix You" (highest score)
         assert len(data["results"]) == 1
@@ -164,8 +164,8 @@ class TestIngestRoute:
             qdrant=mock_qdrant,
             embedder=mock_embedder,
             settings=Settings(
-                server={"debug": True},
-                qdrant={"url": "http://localhost:6333", "collection": "test_lyrics"},
+                debug=True,
+                qdrant={"url": "http://localhost:6333"},
             ),
             collection="test_lyrics",
             force=False,
@@ -194,8 +194,8 @@ class TestIngestRoute:
             qdrant=mock_qdrant,
             embedder=mock_embedder,
             settings=Settings(
-                server={"debug": True},
-                qdrant={"url": "http://localhost:6333", "collection": "test_lyrics"},
+                debug=True,
+                qdrant={"url": "http://localhost:6333"},
             ),
             collection="test_lyrics",
             force=False,
@@ -224,8 +224,8 @@ class TestIngestRoute:
             qdrant=mock_qdrant,
             embedder=mock_embedder,
             settings=Settings(
-                server={"debug": True},
-                qdrant={"url": "http://localhost:6333", "collection": "test_lyrics"},
+                debug=True,
+                qdrant={"url": "http://localhost:6333"},
             ),
             collection="test_lyrics",
             force=True,
@@ -250,12 +250,11 @@ class TestConfigRoute:
         response = client.get("/api/config")
         assert response.status_code == 200
         data = response.json()
-        assert data["qdrant"]["collection"] == "test_lyrics"
-        assert data["server"]["debug"] is True
+        assert data["debug"] is True
 
     def test_config_redacts_secrets(self):
         settings = Settings(
-            server={"debug": True},
+            debug=True,
             qdrant={"url": "http://localhost:6333", "api_key": "secret-key"},
         )
         app = create_app(settings=settings)

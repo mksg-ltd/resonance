@@ -13,7 +13,7 @@ from resonance.config import Settings
 def _make_client(playlists_dir: str | None = None) -> TestClient:
     """Create a test client with optional playlists config."""
     settings_kwargs = {
-        "server": {"debug": True},
+        "debug": True,
         "qdrant": {"url": "http://localhost:6333"},
     }
     if playlists_dir:

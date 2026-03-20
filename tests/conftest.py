@@ -13,8 +13,8 @@ from resonance.config import Settings
 def test_settings() -> Settings:
     """Settings with test defaults."""
     return Settings(
-        server={"debug": True},
-        qdrant={"url": "http://localhost:6333", "collection": "test_lyrics"},
+        debug=True,
+        qdrant={"url": "http://localhost:6333"},
     )
 
 

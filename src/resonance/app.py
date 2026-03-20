@@ -41,8 +41,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if settings is None:
         settings = load_settings()
 
-    docs_url = "/docs" if settings.server.debug else None
-    redoc_url = "/redoc" if settings.server.debug else None
+    docs_url = "/docs" if settings.debug else None
+    redoc_url = "/redoc" if settings.debug else None
 
     app = FastAPI(
         title="resonance",
@@ -54,8 +54,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
 
-    # CORS — allow static UI and Jellyfin plugin to call the API
-    if settings.server.debug:
+    # CORS — allow static UI to call the API
+    if settings.debug:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=["*"],
@@ -85,9 +85,9 @@ def cli() -> None:
     uvicorn.run(
         "resonance.app:create_app",
         factory=True,
-        host=settings.server.host,
-        port=settings.server.port,
-        reload=settings.server.debug,
+        host="0.0.0.0",  # noqa: S104
+        port=8000,
+        reload=settings.debug,
         log_level="info",
     )
 
@@ -96,13 +96,12 @@ def dev() -> None:
     """CLI entry point for local development — always enables debug + reload."""
     import os
 
-    os.environ["RESONANCE__SERVER__DEBUG"] = "true"
-    settings = load_settings()
+    os.environ["RESONANCE__DEBUG"] = "true"
     uvicorn.run(
         "resonance.app:create_app",
         factory=True,
-        host=settings.server.host,
-        port=settings.server.port,
+        host="0.0.0.0",  # noqa: S104
+        port=8000,
         reload=True,
         log_level="info",
     )

@@ -21,7 +21,7 @@ class IngestRequest(BaseModel):
     """Ingest request body."""
 
     provider: str  # named provider config from conf.d/ (e.g., "ollama-bge-m3", "vyakyarth")
-    collection: str | None = None
+    collection: str  # Qdrant collection name
     gap_threshold_sec: float | None = None
     min_chunk_lines: int | None = None
     force: bool = False
@@ -67,7 +67,9 @@ def run_ingest(  # noqa: PLR0913
     Parses LRC files, chunks them, embeds with the configured provider,
     and stores vectors + metadata in Qdrant.
     """
-    collection = collection or settings.qdrant.collection
+    if not collection:
+        msg = "collection is required"
+        raise ValueError(msg)
     gap_threshold = gap_threshold_sec if gap_threshold_sec is not None else settings.chunking.gap_threshold_sec
     min_lines = min_chunk_lines if min_chunk_lines is not None else settings.chunking.min_chunk_lines
 
@@ -251,7 +253,6 @@ def _store_collection_metadata(
 def ingest(body: IngestRequest, request: Request) -> IngestResponse:
     """Trigger LRC ingestion pipeline."""
     settings = request.app.state.settings
-    collection = body.collection or settings.qdrant.collection
     embedder = create_embedder_for_name(body.provider)
 
     result = run_ingest(
@@ -269,7 +270,7 @@ def ingest(body: IngestRequest, request: Request) -> IngestResponse:
     return IngestResponse(
         files_processed=result.files_processed,
         chunks_created=result.chunks_created,
-        collection=collection,
+        collection=body.collection,
         skipped=result.skipped,
         model_mismatch=result.model_mismatch,
         stored_model=result.stored_model,

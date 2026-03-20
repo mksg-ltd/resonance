@@ -27,7 +27,8 @@ def main():
     )
     parser.add_argument(
         "--collection",
-        help="Qdrant collection name (default: from config)",
+        required=True,
+        help="Qdrant collection name",
     )
     parser.add_argument(
         "--gap",
@@ -53,7 +54,7 @@ def main():
         api_key=settings.qdrant.api_key.get_secret_value() if settings.qdrant.api_key else None,
     )
 
-    collection = args.collection or settings.qdrant.collection
+    collection = args.collection
     print(
         f"Config: collection={collection}, provider={args.provider}, "
         f"model={embedder.model_name} ({embedder.dimensions}d), "

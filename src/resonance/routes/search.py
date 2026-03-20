@@ -14,9 +14,9 @@ class SearchRequest(BaseModel):
     """Search request body."""
 
     query: str
+    collection: str  # Qdrant collection name
     artist: str | None = None
     limit: int = 15
-    collection: str | None = None
 
 
 class SearchResult(BaseModel):
@@ -105,8 +105,7 @@ def search(body: SearchRequest, request: Request) -> SearchResponse:
     """Semantic lyric search. Auto-selects embedder based on collection metadata."""
     from resonance.embedders import create_embedder_for_name
 
-    settings = request.app.state.settings
-    collection = body.collection or settings.qdrant.collection
+    collection = body.collection
     qdrant = request.app.state.qdrant
 
     # Pick the right embedder for this collection

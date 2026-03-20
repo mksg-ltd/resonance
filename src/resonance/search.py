@@ -23,7 +23,7 @@ def main():
         required=True,
         help="Named provider config from conf.d/ (e.g., 'ollama-bge-m3', 'vyakyarth')",
     )
-    parser.add_argument("--collection", help="Qdrant collection name (default: from config)")
+    parser.add_argument("--collection", required=True, help="Qdrant collection name")
     parser.add_argument("--artist", help="Filter by artist name")
     parser.add_argument("--limit", type=int, default=15, help="Number of results")
     args = parser.parse_args()
@@ -35,7 +35,7 @@ def main():
         api_key=settings.qdrant.api_key.get_secret_value() if settings.qdrant.api_key else None,
     )
 
-    collection = args.collection or settings.qdrant.collection
+    collection = args.collection
     print(f'\nQuery: "{args.query}"')
     print(f"Collection: {collection} | Provider: {args.provider} | Model: {embedder.model_name}")
     if args.artist:

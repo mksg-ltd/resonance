@@ -12,7 +12,6 @@ class QdrantConfig(BaseModel):
     """Qdrant vector database connection."""
 
     url: str = "http://localhost:6333"
-    collection: str = "lyrics"
     api_key: SecretStr | None = None
 
 
@@ -27,21 +26,6 @@ class PlaylistConfig(BaseModel):
     """Playlist generation settings."""
 
     dir: str | None = None
-
-
-class JellyfinConfig(BaseModel):
-    """Jellyfin integration (future)."""
-
-    url: str | None = None
-    api_key: SecretStr | None = None
-
-
-class ServerConfig(BaseModel):
-    """FastAPI server settings."""
-
-    host: str = "0.0.0.0"  # noqa: S104
-    port: int = 8000
-    debug: bool = False
 
 
 class OpenAIProviderConfig(BaseModel):
@@ -86,12 +70,11 @@ class Settings(BaseSettings):
         env_nested_delimiter="__",
     )
 
+    debug: bool = False  # enables Swagger UI, CORS, reload — set via RESONANCE__DEBUG=true
     data_dir: str | None = None  # root music directory (used by ingest + playlists)
     qdrant: QdrantConfig = QdrantConfig()
     chunking: ChunkingConfig = ChunkingConfig()
-    jellyfin: JellyfinConfig = JellyfinConfig()
     playlists: PlaylistConfig = PlaylistConfig()
-    server: ServerConfig = ServerConfig()
 
     @classmethod
     def settings_customise_sources(
