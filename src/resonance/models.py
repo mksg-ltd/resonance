@@ -49,6 +49,22 @@ class LrcChunk:
 
 
 @dataclass
+class SongData:
+    """A discovered song with its lyrics and metadata.
+
+    Yielded by LibraryScanner, consumed by the ingest pipeline.
+    """
+
+    artist: str
+    title: str
+    audio_path: Path
+    filename: str
+    lines: list[LrcLine]
+    album: str | None = None
+    lyrics_source: str = "sidecar_lrc"
+
+
+@dataclass
 class LrcLyric:
     """A complete song's lyrics with metadata, parsed from an LRC file.
 
