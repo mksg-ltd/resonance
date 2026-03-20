@@ -19,7 +19,8 @@ class PlaylistRequest(BaseModel):
     """Playlist creation request."""
 
     name: str
-    tracks: list[str]  # audio_path values (relative to /app/music)
+    data_dir: str = "/app/music"  # mount path used during ingest (e.g., "/app/tamil")
+    tracks: list[str]  # audio_path values (relative to data_dir)
 
 
 class PlaylistResponse(BaseModel):
@@ -54,13 +55,14 @@ def create_playlist(body: PlaylistRequest) -> PlaylistResponse:
     filename = f"{sanitized}.m3u"
     m3u_path = PLAYLISTS_DIR / filename
 
+    mount_name = Path(body.data_dir).name
     lines = ["#EXTM3U"]
     for track in body.tracks:
         stem = Path(track).stem
         artist, title = extract_metadata_from_filename(stem)
         display = stem if artist == "Unknown" else f"{artist} - {title}"
         lines.append(f"#EXTINF:0,{display}")
-        lines.append(f"../music/{track}")
+        lines.append(f"../{mount_name}/{track}")
 
     m3u_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
