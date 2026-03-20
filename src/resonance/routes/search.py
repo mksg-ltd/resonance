@@ -24,12 +24,15 @@ class SearchResult(BaseModel):
 
     artist: str
     title: str
+    album: str | None = None
     score: float
     section: str
     position: int
     total_sections: int
     lyrics: str
     filename: str
+    audio_path: str = ""
+    lyrics_source: str = "sidecar_lrc"
 
 
 class SearchResponse(BaseModel):
@@ -70,12 +73,15 @@ def run_search(  # noqa: PLR0913
         result = SearchResult(
             artist=p["artist"],
             title=p["title"],
+            album=p.get("album"),
             score=point.score,
             section=p["section"],
             position=p["position"],
             total_sections=p["total_sections"],
             lyrics=p["lyrics"],
             filename=p["filename"],
+            audio_path=p.get("audio_path", ""),
+            lyrics_source=p.get("lyrics_source", "sidecar_lrc"),
         )
         if key not in seen or point.score > seen[key].score:
             seen[key] = result

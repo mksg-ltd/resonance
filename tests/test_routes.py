@@ -41,11 +41,14 @@ class TestSearchRoute:
         mock_point.payload = {
             "artist": "Coldplay",
             "title": "Fix You",
+            "album": "X&Y",
             "section": "Chorus",
             "position": 1,
             "total_sections": 4,
             "lyrics": "Lights will guide you home\nAnd ignite your bones",
-            "filename": "05 - Coldplay - Fix You.lrc",
+            "filename": "05 - Coldplay - Fix You.flac",
+            "audio_path": "Coldplay/X&Y/05 - Coldplay - Fix You.flac",
+            "lyrics_source": "sidecar_lrc",
         }
         mock_qdrant.query_points.return_value = MagicMock(points=[mock_point])
 
@@ -56,6 +59,8 @@ class TestSearchRoute:
         assert len(data["results"]) == 1
         assert data["results"][0]["artist"] == "Coldplay"
         assert data["results"][0]["score"] == 0.95
+        assert data["results"][0]["audio_path"] == "Coldplay/X&Y/05 - Coldplay - Fix You.flac"
+        assert data["results"][0]["album"] == "X&Y"
 
     def test_search_with_artist_filter(self):
         client, mock_qdrant, mock_embedder = _make_test_client()
@@ -77,22 +82,28 @@ class TestSearchRoute:
         point1.payload = {
             "artist": "Coldplay",
             "title": "Fix You",
+            "album": "X&Y",
             "section": "Verse 1",
             "position": 0,
             "total_sections": 4,
             "lyrics": "When you try your best",
-            "filename": "05 - Coldplay - Fix You.lrc",
+            "filename": "05 - Coldplay - Fix You.flac",
+            "audio_path": "Coldplay/X&Y/05 - Coldplay - Fix You.flac",
+            "lyrics_source": "sidecar_lrc",
         }
         point2 = MagicMock()
         point2.score = 0.95
         point2.payload = {
             "artist": "Coldplay",
             "title": "Fix You",
+            "album": "X&Y",
             "section": "Chorus",
             "position": 1,
             "total_sections": 4,
             "lyrics": "Lights will guide you home",
-            "filename": "05 - Coldplay - Fix You.lrc",
+            "filename": "05 - Coldplay - Fix You.flac",
+            "audio_path": "Coldplay/X&Y/05 - Coldplay - Fix You.flac",
+            "lyrics_source": "sidecar_lrc",
         }
         mock_qdrant.query_points.return_value = MagicMock(points=[point1, point2])
 
