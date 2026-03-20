@@ -9,7 +9,7 @@ Two strategies, applied in priority order:
 import re
 from pathlib import Path
 
-from .models import LrcChunk, LrcLine, LrcLyric
+from .models import LrcChunk, LrcLine, LrcLyric, SongData
 
 # Matches section tags like [Chorus], [Verse 1-Akon], [Bridge], [Outro]
 SECTION_TAG_RE = re.compile(
@@ -125,3 +125,30 @@ def chunk_song(filepath: Path, gap_threshold_sec: float = 5.0) -> LrcLyric | Non
 
     lyric.chunks = chunks
     return lyric
+
+
+def chunk_song_data(
+    song: SongData,
+    gap_threshold_sec: float = 5.0,
+    min_chunk_lines: int = 2,
+) -> list[LrcChunk]:
+    """Chunk a SongData into sections.
+
+    Uses section tags if present, otherwise falls back to temporal gap detection.
+    Returns empty list if song has no lines.
+    """
+    if not song.lines:
+        return []
+
+    if has_section_tags(song.lines):
+        chunks = chunk_by_tags(song.lines)
+    else:
+        chunks = chunk_by_gaps(song.lines, gap_threshold_sec=gap_threshold_sec, min_chunk_lines=min_chunk_lines)
+
+    # Filter empty and add position metadata
+    chunks = [c for c in chunks if c.lyrics.strip()]
+    for i, chunk in enumerate(chunks):
+        chunk.position = i
+        chunk.total_chunks = len(chunks)
+
+    return chunks
