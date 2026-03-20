@@ -168,7 +168,7 @@ def _read_metadata(audio_path: Path) -> tuple[str, str, str | None]:
         return tag_artist, tag_title, tag_album
 
     # Fallback: parse from filename
-    fb_artist, fb_title = _extract_metadata_from_filename(audio_path.stem)
+    fb_artist, fb_title = extract_metadata_from_filename(audio_path.stem)
     return tag_artist or fb_artist, tag_title or fb_title, tag_album
 
 
@@ -180,7 +180,7 @@ def _first_tag(tags: mutagen.FileType, key: str) -> str | None:
     return None
 
 
-def _extract_metadata_from_filename(stem: str) -> tuple[str, str]:
+def extract_metadata_from_filename(stem: str) -> tuple[str, str]:
     """Extract artist and title from filename stem.
 
     Pattern: '03 - Coldplay - Ghost Story'
