@@ -12,6 +12,7 @@ services:
       - "8000:8000"
     volumes:
       - ./config:/app/config:ro
+      - ./ui:/app/ui:ro
       - /home/mk/mnt/homelab-data/media/music/tamil:/app/music/tamil:ro
       - /home/mk/mnt/homelab-data/media/music/english:/app/music/english:ro
       - /home/mk/mnt/homelab-data/media/music/tamil/playlists:/app/music/tamil/playlists:rw
