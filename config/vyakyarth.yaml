@@ -1,0 +1,3 @@
+model: krutrim-ai-labs/Vyakyarth
+base_url: http://localhost:8085/v1
+dimensions: 768
