@@ -74,27 +74,45 @@ def run_ingest(  # noqa: PLR0913
         f"gap={gap_threshold}s, min_lines={min_lines}, force={force}, source={data_dir}"
     )
 
-    # Check if collection exists and has data
-    existing_collections = [c.name for c in qdrant.get_collections().collections]
-    if collection in existing_collections and not force:
-        info = qdrant.get_collection(collection)
-        if info.points_count and info.points_count > 0:
-            # Check for model mismatch — warn if active embedder differs from stored
-            stored_model = _get_stored_model(qdrant, collection)
-            mismatch = stored_model is not None and stored_model != embedder.model_name
-            return IngestResult(
-                files_processed=0,
-                chunks_created=0,
-                skipped=0,
-                model_mismatch=mismatch,
-                stored_model=stored_model,
-            )
-
     # Validate data_dir — required for scanning
     if data_dir is None:
         msg = "data_dir is required — set it in config or pass via --data-dir CLI flag"
         raise ValueError(msg)
     source_dir = data_dir
+
+    # Check if collection exists
+    existing_collections = [c.name for c in qdrant.get_collections().collections]
+    collection_exists = collection in existing_collections
+
+    if collection_exists and not force:
+        # Check for model mismatch
+        stored_model = _get_stored_model(qdrant, collection)
+        if stored_model is not None and stored_model != embedder.model_name:
+            return IngestResult(
+                files_processed=0,
+                chunks_created=0,
+                skipped=0,
+                model_mismatch=True,
+                stored_model=stored_model,
+            )
+
+    # Force mode: delete and recreate
+    if force and collection_exists:
+        qdrant.delete_collection(collection)
+        collection_exists = False
+
+    # Create collection if needed
+    if not collection_exists:
+        qdrant.create_collection(
+            collection_name=collection,
+            vectors_config=VectorParams(size=embedder.dimensions, distance=Distance.COSINE),
+        )
+        _store_collection_metadata(qdrant, collection, embedder)
+
+    # Get already-ingested audio paths for incremental mode
+    existing_paths = _get_existing_audio_paths(qdrant, collection) if collection_exists else set()
+    if existing_paths:
+        print(f"Incremental mode: {len(existing_paths)} songs already ingested, scanning for new files")
 
     # Scan library and chunk songs
     chunks_to_embed = []
@@ -103,6 +121,9 @@ def run_ingest(  # noqa: PLR0913
 
     scanner = LibraryScanner()
     for song in scanner.scan(source_dir):
+        audio_path = str(song.audio_path.relative_to(source_dir))
+        if audio_path in existing_paths:
+            continue
         chunks = chunk_song_data(song, gap_threshold_sec=gap_threshold, min_chunk_lines=min_lines)
         if not chunks:
             skipped += 1
@@ -114,7 +135,7 @@ def run_ingest(  # noqa: PLR0913
                 "title": song.title,
                 "album": song.album,
                 "filename": song.filename,
-                "audio_path": str(song.audio_path.relative_to(source_dir)),
+                "audio_path": audio_path,
                 "lyrics_source": song.lyrics_source,
                 "section": chunk.section_name,
                 "position": chunk.position,
@@ -126,21 +147,12 @@ def run_ingest(  # noqa: PLR0913
             for chunk in chunks
         )
 
-    if not chunks_to_embed:
-        return IngestResult(files_processed=0, chunks_created=0, skipped=skipped)
-
-    # Create/recreate collection with provider metadata
-    if collection in existing_collections:
-        qdrant.delete_collection(collection)
-
-    qdrant.create_collection(
-        collection_name=collection,
-        vectors_config=VectorParams(size=embedder.dimensions, distance=Distance.COSINE),
-    )
-
-    # Store collection metadata as a special point (id=0, empty vector)
-    # This lets us know what provider/model was used without external state
-    _store_collection_metadata(qdrant, collection, embedder)
+    # Determine starting point ID (after existing points)
+    if collection_exists:
+        info = qdrant.get_collection(collection)
+        next_id = (info.points_count or 0) + 1
+    else:
+        next_id = 1  # 0 is reserved for metadata
 
     # Embed and upsert in batches
     batch_size = 64
@@ -151,7 +163,7 @@ def run_ingest(  # noqa: PLR0913
 
         points = [
             PointStruct(
-                id=i + j + 1,  # Start from 1 (0 is reserved for metadata)
+                id=next_id + i + j,
                 vector=vec,
                 payload={
                     "artist": chunk["artist"],
@@ -174,6 +186,28 @@ def run_ingest(  # noqa: PLR0913
         qdrant.upsert(collection_name=collection, points=points)
 
     return IngestResult(files_processed=files_processed, chunks_created=len(chunks_to_embed), skipped=skipped)
+
+
+def _get_existing_audio_paths(qdrant: QdrantClient, collection: str) -> set[str]:
+    """Fetch all audio_path values already stored in the collection."""
+    paths: set[str] = set()
+    offset = None
+    while True:
+        results = qdrant.scroll(
+            collection_name=collection,
+            limit=1000,
+            offset=offset,
+            with_payload=["audio_path"],
+            with_vectors=False,
+        )
+        points, next_offset = results
+        for point in points:
+            if point.payload and point.payload.get("audio_path"):
+                paths.add(point.payload["audio_path"])
+        if next_offset is None:
+            break
+        offset = next_offset
+    return paths
 
 
 def _get_stored_model(qdrant: QdrantClient, collection: str) -> str | None:
@@ -211,14 +245,16 @@ def _store_collection_metadata(qdrant: QdrantClient, collection: str, embedder: 
 def ingest(body: IngestRequest, request: Request) -> IngestResponse:
     """Trigger LRC ingestion pipeline."""
     collection = body.collection or request.app.state.settings.qdrant.collection
+    settings = request.app.state.settings
     result = run_ingest(
         qdrant=request.app.state.qdrant,
         embedder=request.app.state.embedder,
-        settings=request.app.state.settings,
+        settings=settings,
         collection=body.collection,
         gap_threshold_sec=body.gap_threshold_sec,
         min_chunk_lines=body.min_chunk_lines,
         force=body.force,
+        data_dir=Path(settings.data_dir) if settings.data_dir else None,
     )
 
     return IngestResponse(

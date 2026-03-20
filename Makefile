@@ -13,7 +13,7 @@ RESET := \033[0m
 
 help: ## Show this help message
 	@printf "$(GREEN)resonance Development Commands:$(RESET)\n"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[0;34m%-15s\033[0m %s\n", $$1, $$2}'
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[0;34m%-15s\033[0m %s\n", $$1, $$2}'
 
 up: ## Start dev dependencies (Qdrant)
 	@printf "$(BLUE)Starting dev services...$(RESET)\n"

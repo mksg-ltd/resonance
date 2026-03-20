@@ -86,6 +86,7 @@ class Settings(BaseSettings):
         env_nested_delimiter="__",
     )
 
+    data_dir: str | None = None  # root music directory (used by ingest + playlists)
     embedding: EmbeddingConfig = EmbeddingConfig()
     qdrant: QdrantConfig = QdrantConfig()
     chunking: ChunkingConfig = ChunkingConfig()

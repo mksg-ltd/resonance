@@ -1,5 +1,6 @@
 """Tests for API routes."""
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
@@ -116,29 +117,51 @@ class TestSearchRoute:
 
 
 class TestIngestRoute:
-    def test_ingest_skips_when_collection_has_data(self):
-        client, mock_qdrant, mock_embedder = _make_test_client()
+    def test_ingest_incremental_skips_existing(self, tmp_path):
+        """Incremental ingest skips songs already in the collection."""
+        _, mock_qdrant, mock_embedder = _make_test_client()
 
-        # Collection exists with data
+        # Collection exists with one song already ingested
         mock_collection = MagicMock()
         mock_collection.name = "test_lyrics"
         mock_qdrant.get_collections.return_value = MagicMock(collections=[mock_collection])
-        mock_qdrant.get_collection.return_value = MagicMock(points_count=100)
+        mock_qdrant.get_collection.return_value = MagicMock(points_count=5)
 
-        # Mock metadata point for model mismatch check
+        # Model matches
         meta_point = MagicMock()
         meta_point.payload = {"_metadata": True, "model": "text-embedding-3-small"}
         mock_qdrant.retrieve.return_value = [meta_point]
 
-        response = client.post("/api/ingest", json={"force": False})
-        assert response.status_code == 200
-        data = response.json()
-        assert data["files_processed"] == 0
-        assert data["chunks_created"] == 0
-        assert data["model_mismatch"] is False
+        # Existing audio_path in collection
+        existing_point = MagicMock()
+        existing_point.payload = {"audio_path": "01 - Test Artist - Test Song.flac"}
+        mock_qdrant.scroll.return_value = ([existing_point], None)
+
+        # Create the same file on disk — should be skipped
+        audio_file = tmp_path / "01 - Test Artist - Test Song.flac"
+        audio_file.write_bytes(b"\x00" * 64)
+        lrc_file = tmp_path / "01 - Test Artist - Test Song.lrc"
+        lrc_file.write_text("[00:00.00] Test line\n[00:05.00] Another line\n")
+
+        from resonance.routes.ingest import run_ingest
+
+        result = run_ingest(
+            qdrant=mock_qdrant,
+            embedder=mock_embedder,
+            settings=Settings(
+                server={"debug": True},
+                qdrant={"url": "http://localhost:6333", "collection": "test_lyrics"},
+            ),
+            collection="test_lyrics",
+            force=False,
+            data_dir=tmp_path,
+        )
+
+        assert result.files_processed == 0
+        assert result.chunks_created == 0
 
     def test_ingest_warns_on_model_mismatch(self):
-        client, mock_qdrant, mock_embedder = _make_test_client()
+        _, mock_qdrant, mock_embedder = _make_test_client()
 
         mock_collection = MagicMock()
         mock_collection.name = "test_lyrics"
@@ -150,12 +173,22 @@ class TestIngestRoute:
         meta_point.payload = {"_metadata": True, "model": "text-embedding-3-large"}
         mock_qdrant.retrieve.return_value = [meta_point]
 
-        response = client.post("/api/ingest", json={"force": False})
-        assert response.status_code == 200
-        data = response.json()
-        assert data["model_mismatch"] is True
-        assert data["stored_model"] == "text-embedding-3-large"
-        assert data["active_model"] == "text-embedding-3-small"
+        from resonance.routes.ingest import run_ingest
+
+        result = run_ingest(
+            qdrant=mock_qdrant,
+            embedder=mock_embedder,
+            settings=Settings(
+                server={"debug": True},
+                qdrant={"url": "http://localhost:6333", "collection": "test_lyrics"},
+            ),
+            collection="test_lyrics",
+            force=False,
+            data_dir=Path("/dummy"),
+        )
+
+        assert result.model_mismatch is True
+        assert result.stored_model == "text-embedding-3-large"
 
     def test_ingest_processes_audio_files(self, tmp_path):
         """Test that audio files with sidecar LRC are ingested via LibraryScanner."""
