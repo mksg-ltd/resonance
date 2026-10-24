@@ -13,10 +13,7 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./ui:/app/ui:ro
-      - /home/mk/mnt/homelab-data/media/music/tamil:/app/music/tamil:ro
-      - /home/mk/mnt/homelab-data/media/music/english:/app/music/english:ro
-      - /home/mk/mnt/homelab-data/media/music/tamil/playlists:/app/music/tamil/playlists:rw
-      - /home/mk/mnt/homelab-data/media/music/english/playlists:/app/music/english/playlists:rw
+      - /var/home/mk/mnt/homelab-data/media/music/english:/app/music:ro
     environment:
       - RESONANCE__DEBUG=true
       - RESONANCE__SERVE_DOCS=true

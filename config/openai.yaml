@@ -1,4 +1,5 @@
 # OpenAI embedding provider configuration
 # Copy to openai.yaml and set your API key.
+type: openai
 api_key: ${OPENAI_API_KEY}
 model: text-embedding-3-large

@@ -78,6 +78,30 @@ class TestSearchRoute:
         assert data["results"][0]["audio_path"] == "Coldplay/X&Y/05 - Coldplay - Fix You.flac"
         assert data["results"][0]["album"] == "X&Y"
 
+    def test_search_skips_collection_metadata_point(self):
+        client, mock_qdrant, _ = _make_test_client()
+        metadata = MagicMock(score=0.5, payload={"_metadata": True, "config_name": "test-provider"})
+        song = MagicMock(
+            score=0.9,
+            payload={
+                "artist": "Coldplay",
+                "title": "Bani Adam",
+                "section": "Opening",
+                "position": 0,
+                "total_sections": 1,
+                "lyrics": "sample text",
+                "filename": "track.flac",
+            },
+        )
+        mock_qdrant.query_points.return_value = MagicMock(points=[metadata, song])
+
+        response = client.post(
+            "/api/search", json={"query": "shared humanity", "collection": "test_lyrics", "limit": 50}
+        )
+
+        assert response.status_code == 200
+        assert [result["title"] for result in response.json()["results"]] == ["Bani Adam"]
+
     def test_search_with_artist_filter(self):
         client, mock_qdrant, mock_embedder = _make_test_client()
         mock_qdrant.query_points.return_value = MagicMock(points=[])

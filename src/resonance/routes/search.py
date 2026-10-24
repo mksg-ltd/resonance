@@ -69,6 +69,8 @@ def run_search(  # noqa: PLR0913
     seen: dict[str, SearchResult] = {}
     for point in results.points:
         p = point.payload
+        if not p or p.get("_metadata"):
+            continue
         key = f"{p['artist']}|{p['title']}"
         result = SearchResult(
             artist=p["artist"],

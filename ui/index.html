@@ -179,7 +179,7 @@
           const data = await res.json();
           const select = document.getElementById("collection");
           select.innerHTML = data
-            .filter((c) => c.points_count > 0)
+            .filter((c) => c.points_count > 1)
             .map((c) => `<option value="${c.name}">${c.name} (${c.points_count})</option>`)
             .join("");
         } catch (e) {
@@ -207,6 +207,10 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ query, collection, limit: 50 }),
           });
+          if (!res.ok) {
+            const error = await res.json().catch(() => null);
+            throw new Error(error?.detail || 'Search failed (HTTP ' + res.status + ')');
+          }
           const data = await res.json();
 
           const filtered = data.results.filter((r) => r.score >= minScore);
