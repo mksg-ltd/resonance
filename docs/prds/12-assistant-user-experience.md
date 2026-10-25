@@ -44,11 +44,26 @@ interpretations of a song's meaning.
 ## Login and Library Authorization
 
 The Navidrome username and password must not be a single global `.env` identity.
-Keep the Navidrome base URL and stable server ID in service configuration, but have
-each person sign in through the Vue UI with their own Navidrome account. FastAPI
-validates that login with Navidrome and establishes a Resonance session bound to that
-Navidrome user. Do not return Navidrome credentials or reusable upstream tokens to the
-page, store them in browser storage, or include them in logs.
+Keep `NAVIDROME_BASE_URL` in service configuration, but remove the configured global
+Navidrome username/password. Each person signs in through Vue with their own Navidrome
+account. FastAPI validates the credentials with Navidrome, creates a user-scoped
+Resonance JWT for subsequent API calls, and resolves each request to the authenticated
+Navidrome identity. All user-facing FastAPI endpoints require that authorization.
+Never put passwords in a JWT, return Navidrome credentials or reusable upstream tokens
+to the page, store them in browser storage, or include them in logs.
+
+The login/session implementation must retain the user's Navidrome authorization for
+upstream calls without falling back to the administrator's credentials. Prefer a
+server-side session record for any upstream token or credential material; the
+Resonance JWT should be short-lived and revocable. Admin-only endpoints additionally
+check the authenticated Navidrome user's admin role. MCP calls must resolve the same
+user identity and permissions as Vue rather than using a global service token.
+
+**First PRD-12 milestone:** establish and verify this login-to-authorized-request
+path before building the rest of the Vue or MCP experience. The spike must prove a
+regular user can authenticate, receives only their permitted libraries, cannot search
+an admin-only library by guessing a collection ID, and creates a private playlist
+owned by their own Navidrome account.
 
 Navidrome remains the authority for library and playlist permissions:
 
@@ -72,11 +87,13 @@ Navidrome remains the authority for library and playlist permissions:
   the user who requested it.
 
 Navidrome 0.64+ has an optional experimental Jellyfin-compatible login endpoint that
-returns a Navidrome JWT and enforces the logged-in user's library permissions. The
-standard Subsonic API also authenticates individual users and scopes `getMusicFolders`
-and other calls, but uses its client authentication scheme rather than an OAuth-style
-login flow. Select the supported login method during PRD refinement; do not depend on
-Navidrome being an OIDC identity provider. See the official [multi-library
+returns a Navidrome JWT and enforces the logged-in user's library permissions. Its
+token lifecycle and compatibility with the Subsonic calls Resonance currently uses
+need verification before selecting it. The standard Subsonic API also authenticates
+individual users and scopes `getMusicFolders` and other calls, but uses its client
+authentication scheme rather than an OAuth-style login flow. Compare these choices
+and decide how FastAPI maintains the upstream user context. Do not depend on Navidrome
+being an OIDC identity provider. See the official [multi-library
 documentation](https://www.navidrome.org/docs/usage/features/multi-library/) and
 [Jellyfin API documentation](https://www.navidrome.org/docs/usage/features/jellyfin/).
 
@@ -103,6 +120,9 @@ client should spawn CLI subprocesses or duplicate product logic.
   Delegate credential verification to Navidrome and derive the session identity and
   library access from the authenticated Navidrome account. Do not require external
   OIDC by default.
+- Remove `NAVIDROME_USER_ID` and `NAVIDROME_USER_PASSWORD` from `.env`; retain
+  `NAVIDROME_BASE_URL` as the configured Navidrome connection value. Do not bind
+  indexed collection identity to whichever admin account ingested it.
 - Keep Vue and MCP deployment details open while the workflows are explored.
 
 ## Candidate Direct UI Flow
