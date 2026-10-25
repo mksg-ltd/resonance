@@ -48,7 +48,8 @@ PRD-12 defines the login and authorization foundation: Navidrome username/passwo
 login, Resonance JWTs for API authorization, the configured admin username, and
 Navidrome-enforced library permissions. PRD-13 depends on that work and must not
 reimplement authentication or use a global operator token for user search or playlist
-creation.
+creation. Vue receives the JWT as an HttpOnly cookie; FastMCP sends it as a bearer
+token. Both resolve to the same authenticated user context in FastAPI.
 
 Admin ingestion/configuration and ordinary user search/playlist operations remain
 separate capabilities. FastAPI defines the shared HTTP API contracts. The Vue

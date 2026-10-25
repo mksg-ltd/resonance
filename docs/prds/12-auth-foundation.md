@@ -70,7 +70,9 @@ carry that user's permissions through every API operation.
 3. FastAPI issues a short-lived, signed Resonance JWT for later API requests. The JWT
    identifies the caller; it must not contain the password or serve as a Navidrome
    credential.
-4. FastAPI retains only the upstream credential/session material it needs to call
+4. FastAPI returns the JWT in an `HttpOnly` cookie. The browser automatically sends it
+   with later same-origin API requests; Vue does not read or store the JWT itself.
+5. FastAPI retains only the upstream credential/session material it needs to call
    Navidrome as that user, in server-side session state with a bounded lifetime. Logout
    or expiry invalidates the Resonance session. Restart behavior and single-process vs
    shared session storage are design details to resolve before implementation.
@@ -79,6 +81,13 @@ Passwords and reusable upstream authentication values must not be returned to Vu
 placed in browser storage, embedded in JWT claims, or written to logs. Login attempts
 must be rate-limited and credential submission must use HTTPS except for explicitly
 trusted local development.
+
+Set the browser cookie with `HttpOnly`, `Secure` in production, an explicit `SameSite`
+policy, a narrow path, and a short expiration. Protect state-changing cookie-authenticated
+requests against CSRF. Prefer serving the built Vue app and FastAPI from the same origin;
+for local Vite development, proxy API paths through the Vite dev server. If the UI and
+API must use different origins, configure credentialed CORS for the exact UI origin and
+include CSRF protection.
 
 ### Admin recognition
 
@@ -147,8 +156,8 @@ Navidrome client.
 - What signs the Resonance JWT, how long does it live, and how are logout and key
   rotation handled without introducing a large auth framework?
 - How is the JWT signing key configured/generated securely with minimal setup?
-- Should protected Vue requests use an HttpOnly session cookie or an Authorization
-  bearer token? The MCP client path must work with the same caller model.
+- How should FastMCP clients obtain and send the same user-scoped Resonance JWT as an
+  Authorization bearer token, since they cannot use the Vue browser cookie?
 - What should happen when an admin username changes or the configured value is
   missing? Proposed behavior: no user is an admin until it is explicitly configured.
 - How should collections be resolved when a user can see a library but the admin has
