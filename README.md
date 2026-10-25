@@ -4,15 +4,16 @@ Search the meaning of lyrics in your Navidrome library. Resonance retrieves trac
 metadata and synced lyrics through Navidrome APIs, chunks and embeds the lyrics,
 and stores searchable sections in Qdrant. No music bind mount is required.
 
-The shared Python application interface serves the CLI and FastAPI, with a future
-FastMCP adapter planned over the same operations. Ingestion and library/model setup
-are administrative tasks. The user-facing goal is assistant-led lyric search and
-private playlist creation through MCP, using context the user chooses to share with
-their LLM. Playback remains the job of a compatible music client or playback tool.
+The shared Python application interface serves the CLI and FastAPI. FastAPI endpoints
+are the intended contract for both a future Vue application and FastMCP adapter.
+Ingestion and library/model setup are administrative tasks. The user-facing goal is
+direct lyric search and private playlist creation in Vue, with equivalent MCP tools so
+an assistant can do the same using context the user chooses to share. Playback remains
+the job of a compatible music client or playback tool.
 
 The current single-account HTML page is an operator PoC for ingestion and search,
-not the final user UI. It has no user login or multi-user authorization. Automatic
-seed/theme generation, an MCP adapter, and a production UI are follow-on work.
+not the final user UI. It has no user login or multi-user authorization. The Vue and
+MCP experience is an evolving follow-on described in [PRD-12](docs/prds/12-assistant-user-experience.md).
 
 ## Setup
 

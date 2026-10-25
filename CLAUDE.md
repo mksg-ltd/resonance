@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Semantic search engine for song lyrics. Users search by meaning/theme ("songs about letting go") instead of keywords. Shared Python application operations serve CLI first, FastAPI next, and possible future MCP/UI clients. Navidrome is the production library source.
+Semantic search engine for song lyrics. Users search by meaning/theme ("songs about letting go") instead of keywords. Shared Python application operations serve CLI and FastAPI; future Vue and FastMCP clients consume the FastAPI contracts. Navidrome is the production library source.
 
 **Core pipeline:** Navidrome metadata/synced lyrics → normalized Track → chunk → embed (TEI-compatible/OpenAI/Ollama) → Qdrant → semantic search using server song IDs.
 
@@ -29,8 +29,8 @@ Native collections bind server/account/library and effective embedding/index set
 Qdrant owns actual section-completion state. SQLite is only for native playlist-save
 operations, not track mapping. The current HTML is an operator PoC. Treat ingestion,
 library selection, and embedding configuration as admin operations; semantic search
-and private playlist creation are user-facing operations intended for future MCP
-tools. A playback client/tool handles playback. Multi-user auth and identity mapping,
+and private playlist creation are user-facing operations intended for a Vue UI and
+equivalent MCP tools over the FastAPI API. A playback client/tool handles playback. Multi-user auth and identity mapping,
 full per-library refresh, MCP, and seed/theme playlist generation remain future scope.
 
 ## Commands
