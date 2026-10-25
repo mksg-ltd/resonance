@@ -12,8 +12,9 @@ an assistant can do the same using context the user chooses to share. Playback r
 the job of a compatible music client or playback tool.
 
 The current single-account HTML page is an operator PoC for ingestion and search,
-not the final user UI. It has no user login or multi-user authorization. The Vue and
-MCP experience is an evolving follow-on described in [PRD-12](docs/prds/12-assistant-user-experience.md).
+not the final user UI. It has no user login or multi-user authorization. The auth
+foundation is described in [PRD-12](docs/prds/12-auth-foundation.md); the Vue and MCP
+experience is an evolving follow-on in [PRD-13](docs/prds/13-assistant-user-experience.md).
 
 ## Setup
 
@@ -26,10 +27,12 @@ cp .env.example .env
 uv sync
 ```
 
-Edit `.env` with `NAVIDROME_BASE_URL`, `NAVIDROME_USER_ID` (the login username), and
-`NAVIDROME_USER_PASSWORD`. Use HTTPS. An explicitly trusted local HTTP deployment
-requires `NAVIDROME_ALLOW_HTTP=true`. Keep `NAVIDROME_SERVER_ID` stable; rotate it
-and build a new index if rebuilding the server changes song identities.
+The current PoC reads `NAVIDROME_BASE_URL`, `NAVIDROME_USER_ID` (the login username),
+and `NAVIDROME_USER_PASSWORD` from `.env`. PRD-12 replaces the global account
+credentials with user login and `RESONANCE_ADMIN_USER`. Use HTTPS. An explicitly
+trusted local HTTP deployment requires `NAVIDROME_ALLOW_HTTP=true`. Keep
+`NAVIDROME_SERVER_ID` stable; rotate it and build a new index if rebuilding the server
+changes song identities.
 
 Set a private `RESONANCE__API_TOKEN` to enable native HTTP operations. Local CLI
 execution is the trusted operator interface and does not require that token. Python
@@ -180,11 +183,9 @@ local M3U endpoint and raw-LRC inspection command have been removed.
 - **Playback:** a Navidrome-compatible client or separate playback integration plays
   the resulting playlist. Resonance does not stream audio.
 
-Navidrome does not act as a general OIDC identity provider. Its external-auth mode
-delegates login to a trusted reverse proxy/auth provider; its optional experimental
-Jellyfin-compatible API has a client login endpoint but is not an OIDC sign-in flow.
-See [PRD-12](docs/prds/12-assistant-user-experience.md) for the current login and
-account-mapping questions.
+The planned login uses each user's Navidrome credentials through the standard
+Subsonic-compatible API. Resonance issues its own JWT for API calls. See
+[PRD-12](docs/prds/12-auth-foundation.md) for the design and remaining session details.
 
 ### Local Search and Ingestion PoC
 

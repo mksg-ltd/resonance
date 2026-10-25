@@ -12,7 +12,7 @@ tags: [playlists, navidrome, semantic-search, lyrics]
 
 # Navidrome Semantic Playlists
 
-**Status**: Complete — Navidrome backend integration and the local operator search/ingestion PoC are implemented. Assistant-facing MCP and user UI are tracked separately in [PRD-12](12-assistant-user-experience.md).
+**Status**: Complete — Navidrome backend integration and the local operator search/ingestion PoC are implemented. User authentication is specified in [PRD-12](12-auth-foundation.md); the assistant-facing MCP and Vue experience is tracked in [PRD-13](13-assistant-user-experience.md).
 
 **Delivery boundary**: Single-account Navidrome backend capabilities and a minimal local HTML proof of concept for an operator to ingest and search. This is not the eventual user product. Ingestion and model/library configuration are administrative operations; semantic search and playlist creation are user-facing operations intended for assistant/MCP use. Those interfaces and workflows are explicitly outside this completed PRD.
 
@@ -205,21 +205,14 @@ caller identity maps to a Navidrome account and library, how playlist ownership 
 enforced, and how credentials are isolated. Do not treat a shared operator token as
 end-user authentication.
 
-### Authentication direction
+### Authentication follow-on
 
-Navidrome is a music server, not a general OIDC identity provider. Its externalized
-authentication feature delegates login to a reverse proxy/auth service (which may use
-OIDC) and trusts a configured user header from trusted sources. Navidrome also has an
-experimental, optional Jellyfin-compatible API with a username/password login that
-returns a Navidrome JWT; this is a music-client API, not an OIDC authorization flow or
-a portable “Login with Navidrome” integration. See Navidrome's [externalized auth
-docs](https://www.navidrome.org/docs/usage/externalized-authentication/) and
-[Jellyfin API docs](https://www.navidrome.org/docs/usage/features/jellyfin/).
-
-For a future multi-user UI, evaluate an external OIDC provider/reverse proxy or a
-Resonance-owned OIDC client/session. Treat Navidrome credentials and Resonance user
-identity as separate concerns. The local operator PoC has no user login and must not
-be exposed as a network-facing multi-user UI.
+The completed PoC uses one operator-configured Navidrome account and has no
+end-user login. The next auth work is specified in [PRD-12](12-auth-foundation.md):
+authenticate each user through Navidrome's standard Subsonic API, issue a Resonance
+JWT for FastAPI calls, and recognize the configured administrator by username after
+Navidrome has verified that login. The PoC must not be exposed as a network-facing
+multi-user UI.
 
 These capabilities need separate scope after the current PoC. They guide the shared
 application contracts but are not all part of the current implementation batch.
@@ -404,7 +397,8 @@ companion [PoC UI implementation plan](../plans/2026-10-25-prd09-search-ingest-p
 ### Deferred Scope
 
 - [ ] Design seed/theme generation, recording-level ranking, and evaluation separately.
-- [x] Track assistant-facing UI and MCP direction separately in [PRD-12](12-assistant-user-experience.md).
+- [x] Track authentication foundation in [PRD-12](12-auth-foundation.md) and
+      assistant-facing UI/MCP direction in [PRD-13](13-assistant-user-experience.md).
 - [ ] Specify playlist updates/public sharing independently.
 - [ ] Design full refresh reconciliation for changed/deleted tracks and scheduling.
 - [ ] Define MCP caller identity to Navidrome account mapping before multi-user use.
@@ -473,8 +467,9 @@ browser version and its displayed private indicator remain unrecorded.
   token/library/ingest controls, searchable collection states, loopback-only dev hosting,
   restricted debug CORS, and local setup instructions.
 - 2026-10-25: Clarified product boundary: ingestion is administrative; search and
-  private playlist creation are user-oriented MCP capabilities, with playback handled
-  by a compatible client/tool. Recorded Navidrome auth options and the need to define
-  caller-to-Navidrome identity mapping before multi-user access.
+  private playlist creation are user-oriented capabilities, with playback handled by
+  a compatible client/tool. Recorded the need to define caller-to-Navidrome identity
+  mapping before multi-user access.
 - 2026-10-25: Closed PRD-09 at the completed single-account Navidrome backend and
-  local operator PoC boundary. Moved evolving assistant/UI/MCP product work to PRD-12.
+  local operator PoC boundary. Moved authentication to PRD-12 and evolving
+  assistant/UI/MCP product work to PRD-13.

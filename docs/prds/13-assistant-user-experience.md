@@ -10,7 +10,8 @@ tags: [assistant, mcp, vue, api, playlists, navidrome]
 # User Search and Playlist Experience: Vue UI and MCP
 
 **Status**: Early draft — direct Vue experience and MCP use case recorded; workflows,
-API contracts, authentication, and first-release scope remain open.
+API contracts, and first-release scope remain open. Authentication is specified in
+[PRD-12](12-auth-foundation.md).
 
 **Relationship to PRD-09**: PRD-09 is complete for the single-account Navidrome
 backend and local operator search/ingestion PoC. This PRD captures the evolving direct
@@ -41,64 +42,16 @@ interpretations of a song's meaning.
 - **Playback:** hand off the resulting playlist to the user's existing music client or
   playback integration.
 
-## Login and Library Authorization
+## Authentication Dependency
 
-The Navidrome username and password must not be a single global `.env` identity.
-Keep `NAVIDROME_BASE_URL` in service configuration, but remove the configured global
-Navidrome username/password. Each person signs in through Vue with their own Navidrome
-account. FastAPI validates the credentials with Navidrome, creates a user-scoped
-Resonance JWT for subsequent API calls, and resolves each request to the authenticated
-Navidrome identity. All user-facing FastAPI endpoints require that authorization.
-Never put passwords in a JWT, return Navidrome credentials or reusable upstream tokens
-to the page, store them in browser storage, or include them in logs.
+PRD-12 defines the login and authorization foundation: Navidrome username/password
+login, Resonance JWTs for API authorization, the configured admin username, and
+Navidrome-enforced library permissions. PRD-13 depends on that work and must not
+reimplement authentication or use a global operator token for user search or playlist
+creation.
 
-The login/session implementation must retain the user's Navidrome authorization for
-upstream calls without falling back to the administrator's credentials. Prefer a
-server-side session record for any upstream token or credential material; the
-Resonance JWT should be short-lived and revocable. Admin-only endpoints additionally
-check the authenticated Navidrome user's admin role. MCP calls must resolve the same
-user identity and permissions as Vue rather than using a global service token.
-
-**First PRD-12 milestone:** establish and verify this login-to-authorized-request
-path before building the rest of the Vue or MCP experience. The spike must prove a
-regular user can authenticate, receives only their permitted libraries, cannot search
-an admin-only library by guessing a collection ID, and creates a private playlist
-owned by their own Navidrome account.
-
-Navidrome remains the authority for library and playlist permissions:
-
-- Fetch the signed-in user's accessible libraries from Navidrome for each request or
-  through a short-lived permission cache. Recheck permissions at playlist creation. Do
-  not trust a library ID or collection name supplied by the browser without checking
-  it against this user's permissions.
-- An administrator can ingest libraries they can access and configure one or more
-  collections for each library. A collection is an index variant, for example one
-  model/provider profile; collection metadata binds it to the Navidrome server and
-  library, not to the admin username used to ingest it. Remove the current username
-  from the source fingerprint: login identity is authorization context, while source
-  identity is the stable Navidrome server.
-- For a normal user, expose only configured collections whose library IDs are in
-  their Navidrome-visible library set. Apply this restriction in FastAPI/application
-  code and Qdrant queries, not only by hiding options in Vue. A user with access to
-  libraries B and C must never receive results from admin-only library A.
-- Revalidate selected song IDs using the signed-in user's Navidrome identity before
-  saving. Create the private playlist under that same user and verify its owner and
-  contents. A playlist created by the admin account may not be playable or editable by
-  the user who requested it.
-
-Navidrome 0.64+ has an optional experimental Jellyfin-compatible login endpoint that
-returns a Navidrome JWT and enforces the logged-in user's library permissions. Its
-token lifecycle and compatibility with the Subsonic calls Resonance currently uses
-need verification before selecting it. The standard Subsonic API also authenticates
-individual users and scopes `getMusicFolders` and other calls, but uses its client
-authentication scheme rather than an OAuth-style login flow. Compare these choices
-and decide how FastAPI maintains the upstream user context. Do not depend on Navidrome
-being an OIDC identity provider. See the official [multi-library
-documentation](https://www.navidrome.org/docs/usage/features/multi-library/) and
-[Jellyfin API documentation](https://www.navidrome.org/docs/usage/features/jellyfin/).
-
-Administrative ingestion/configuration must be distinguished from ordinary user
-search and playlist operations. FastAPI defines the shared HTTP API contracts. The Vue
+Admin ingestion/configuration and ordinary user search/playlist operations remain
+separate capabilities. FastAPI defines the shared HTTP API contracts. The Vue
 application and FastMCP adapter both consume those endpoints; FastAPI routes delegate
 to the transport-independent application operations established in PRD-09. Neither
 client should spawn CLI subprocesses or duplicate product logic.
@@ -114,15 +67,10 @@ client should spawn CLI subprocesses or duplicate product logic.
   these tools with explicit structured arguments.
 - Keep library ingestion and embedding configuration as operator/admin tasks. The
   current static HTML page remains an operator PoC, not the intended end-user UI.
-- Start with one self-hosted Navidrome account/library. Avoid designing multi-tenant
-  roles and enterprise identity before the single-user interaction is proven.
-- Prefer the simplest practical sign-in and account setup for a self-hosted install.
-  Delegate credential verification to Navidrome and derive the session identity and
-  library access from the authenticated Navidrome account. Do not require external
-  OIDC by default.
-- Remove `NAVIDROME_USER_ID` and `NAVIDROME_USER_PASSWORD` from `.env`; retain
-  `NAVIDROME_BASE_URL` as the configured Navidrome connection value. Do not bind
-  indexed collection identity to whichever admin account ingested it.
+- Support multiple users on one self-hosted Navidrome server, each with the libraries
+  Navidrome grants to their account. Do not add a separate Resonance user/role database.
+- Use PRD-12's configured admin username for admin operations; do not add a hidden
+  service account. Do not bind indexed collection identity to the admin username.
 - Keep Vue and MCP deployment details open while the workflows are explored.
 
 ## Candidate Direct UI Flow
@@ -170,15 +118,8 @@ tool names, approval UX, and playlist handoff are not fixed requirements yet.
   controls belong in that application?
 - Which FastAPI endpoints should form the shared Vue/FastMCP contract, and where should
   search and playlist operations be separate versus composed?
-- Should sign-in use Navidrome's experimental Jellyfin login/JWT or the stable
-  Subsonic authentication scheme? Which minimum Navidrome version/configuration should
-  be supported?
-- How should the Resonance session hold or refresh user-scoped Navidrome credentials
-  without exposing them to Vue storage or MCP tool arguments?
 - How should FastMCP receive the authenticated Resonance user context while preserving
   the same library-scoped API behavior as Vue?
-- Which Navidrome role field/API should authorize admin-only ingestion and collection
-  configuration?
 - Which result fields and lyric excerpt limits give both the Vue user and an LLM enough
   grounding while minimizing unnecessary lyric disclosure?
 - Does playlist creation need a separate confirmation call, or is an explicit create
@@ -189,8 +130,9 @@ tool names, approval UX, and playlist handoff are not fixed requirements yet.
 ## Readiness
 
 This PRD is intentionally exploratory and not approved for implementation. Resolve the
-first Vue user flow, shared FastAPI contract, Navidrome login/session method, MCP user
-context, and playlist ownership contract before writing an implementation plan.
+first Vue user flow, shared FastAPI contract, MCP user context, and playlist ownership
+contract before writing an implementation plan. Authentication is a prerequisite
+tracked in PRD-12.
 Ingestion progress, stop, restart, and full per-library refresh are separate
 administrative work and may receive their own PRD after prioritization.
 
@@ -198,5 +140,4 @@ administrative work and may receive their own PRD after prioritization.
 
 - [PRD-09 — Navidrome backend and operator PoC](09-navidrome-semantic-playlists.md)
 - [Shared application boundary ADR](../adr/001-navidrome-application-boundary.md)
-- [Navidrome externalized authentication](https://www.navidrome.org/docs/usage/externalized-authentication/)
-- [Navidrome experimental Jellyfin-compatible API](https://www.navidrome.org/docs/usage/features/jellyfin/)
+- [PRD-12 — User Authentication and Authorization Foundation](12-auth-foundation.md)
