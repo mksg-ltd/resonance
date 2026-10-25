@@ -1,2 +1,0 @@
-- [user_profile.md](user_profile.md) — User background: homelab, Jellyfin, learning vector DBs
-- [feedback_teaching_style.md](feedback_teaching_style.md) — Prefers conceptual depth and explanations alongside code
