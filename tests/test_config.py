@@ -29,12 +29,27 @@ class TestSettingsDefaults:
         assert settings.chunking.min_chunk_lines == 3
 
 
-def test_navidrome_dotenv_preserves_quoted_and_dollar_credentials(tmp_path, monkeypatch):
+def test_admin_user_uses_the_exact_environment_key(monkeypatch):
+    monkeypatch.setenv("RESONANCE_ADMIN_USER", "owner")
+    monkeypatch.delenv("RESONANCE__ADMIN_USER", raising=False)
+    assert Settings(_env_file=None).admin_user == "owner"
+
+
+def test_admin_user_can_be_set_programmatically():
+    assert Settings(admin_user="owner", _env_file=None).admin_user == "owner"
+
+
+def test_navidrome_configuration_contains_server_settings_not_user_credentials(tmp_path, monkeypatch):
     from resonance.config import NavidromeConfig
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("NAVIDROME_USER_PASSWORD", raising=False)
-    (tmp_path / ".env").write_text('NAVIDROME_USER_PASSWORD="literal$dollar and spaces"\n')
+    (tmp_path / ".env").write_text(
+        'NAVIDROME_BASE_URL="https://music.test"\n'
+        'NAVIDROME_USER_ID="legacy-user"\n'
+        'NAVIDROME_USER_PASSWORD="legacy-secret"\n'
+    )
     settings = NavidromeConfig()
-    assert settings.user_password.get_secret_value() == "literal$dollar and spaces"
-    assert "literal" not in settings.model_dump_json()
+    assert settings.base_url == "https://music.test"
+    assert not hasattr(settings, "user_id")
+    assert not hasattr(settings, "user_password")
+    assert "legacy-secret" not in settings.model_dump_json()

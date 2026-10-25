@@ -12,6 +12,7 @@ Semantic search engine for song lyrics. Users search by meaning/theme ("songs ab
 - **Config:** Bundled embedding profile YAML + pydantic-settings environment settings
 - **Vector DB:** Qdrant (Docker)
 - **Embeddings:** TEI through its OpenAI-compatible API; explicit OpenAI/Ollama configurations also supported
+- **Web UI:** Vue 3/Vite scaffold built into the Python image at `/app/`; operator PoC at `/ui`
 - **Package manager:** uv
 - **Build:** hatchling
 
@@ -36,6 +37,7 @@ full per-library refresh, MCP, and seed/theme playlist generation remain future 
 ## Commands
 
 - `make run` — start dev server (debug mode, Swagger UI at /docs, auto-reload)
+- `pnpm --dir vue-ui dev` — Vue/Vite dev server at 127.0.0.1:5173; `/api` is proxied to FastAPI
 - `make test` — run pytest
 - `make lint` — ruff check + format check
 - `make install` — uv sync + pre-commit hooks
@@ -83,7 +85,7 @@ src/resonance/
 - Embedding runtime settings use `RESONANCE__EMBEDDING__PROFILE`, `BASE_URL`, and
   `API_KEY`; legacy shell `OPENAI_API_KEY` remains a fallback for OpenAI.
 - Collection metadata in Qdrant stores profile/provider/model/dimensions — collections are self-describing
-- Native ingest never deletes/recreates a collection automatically. Identical partial writes can resume; changed indexed lyrics require a new collection until refresh is implemented. Native ingest HTTP requires an operator token.
+- Native ingest never deletes/recreates a collection automatically. Identical partial writes can resume; changed indexed lyrics require a new collection until refresh is implemented. HTTP uses Navidrome-verified sessions; ingestion and collection deletion require `RESONANCE_ADMIN_USER`.
 - `.venv` lives at project root (not in `src/`)
 - PRDs in `docs/prds/`, plans in `docs/plans/`
 
@@ -91,4 +93,5 @@ src/resonance/
 - Never parse `.env` through Make or print credentials/lyrics in default logs.
 - `docker-compose.dev.yml` was intentionally removed; dev commands use the sole Compose file.
 
-- Native create/status uses globally unique operation keys; never automatically retry unknown-ID creation. Keep the SQLite journal durable. Native HTTP endpoints require RESONANCE__API_TOKEN; CLI trusts the local operator.
+- Native create/status uses globally unique operation keys; never automatically retry unknown-ID creation. Keep the SQLite journal durable. Browser authentication uses an HttpOnly cookie and same-origin API calls; Navidrome-dependent CLI commands prompt for credentials. Configure only trusted TLS proxy IPs for forwarded HTTPS headers. Compose binds local debug HTTP to loopback.
+- A TLS reverse proxy must preserve the accepted public `Host` and reject unknown hosts; configure its exact peer IP/CIDR in `RESONANCE__TRUSTED_PROXY_IPS` before forwarding HTTPS headers.

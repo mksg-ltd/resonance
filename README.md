@@ -11,10 +11,9 @@ direct lyric search and private playlist creation in Vue, with equivalent MCP to
 an assistant can do the same using context the user chooses to share. Playback remains
 the job of a compatible music client or playback tool.
 
-The current single-account HTML page is an operator PoC for ingestion and search,
-not the final user UI. It has no user login or multi-user authorization. The auth
-foundation is described in [PRD-12](docs/prds/12-auth-foundation.md); the Vue and MCP
-experience is an evolving follow-on in [PRD-13](docs/prds/13-assistant-user-experience.md).
+The Vue scaffold provides Navidrome login and authorized-library/collection discovery.
+The `/ui` HTML page remains an operator PoC for ingestion and search. Broader search,
+playlist authoring, and MCP tools are planned in [PRD-13](docs/prds/13-assistant-user-experience.md).
 
 ## Setup
 
@@ -27,17 +26,19 @@ cp .env.example .env
 uv sync
 ```
 
-The current PoC reads `NAVIDROME_BASE_URL`, `NAVIDROME_USER_ID` (the login username),
-and `NAVIDROME_USER_PASSWORD` from `.env`. PRD-12 replaces the global account
-credentials with user login and `RESONANCE_ADMIN_USER`. Use HTTPS. An explicitly
-trusted local HTTP deployment requires `NAVIDROME_ALLOW_HTTP=true`. Keep
-`NAVIDROME_SERVER_ID` stable; rotate it and build a new index if rebuilding the server
-changes song identities.
+Set `NAVIDROME_BASE_URL` and optionally `RESONANCE_ADMIN_USER` in `.env`. Each user
+signs in with their own Navidrome credentials in the UI; Navidrome remains the source
+of library access and playlist ownership. A matching admin username enables ingestion
+and collection deletion after that account has authenticated. Navidrome-dependent CLI
+commands prompt for credentials; search-only CLI use does not. Do not commit `.env` or
+real credentials.
 
-Set a private `RESONANCE__API_TOKEN` to enable native HTTP operations. Local CLI
-execution is the trusted operator interface and does not require that token. Python
-and Compose parse `.env`; Make does not source or expand credentials as Make syntax.
-Do not commit `.env` or real credentials.
+Serve remote deployments over HTTPS, directly or through a TLS-terminating reverse
+proxy. Configure `RESONANCE__TRUSTED_PROXY_IPS` only with the proxy's exact address
+or CIDR. Compose binds its debug API port to host loopback. Sessions and the JWT
+signing key are process-local; a server restart requires users to sign in again.
+The reverse proxy must preserve the accepted public `Host` header and reject unknown
+hosts before forwarding requests.
 
 Supported embedding profiles ship in Resonance's bundled catalog. Select a profile
 and the endpoint reachable from the process running Resonance in `.env`:
@@ -62,8 +63,14 @@ no cloud fallback. Profile IDs and supported dimensions are listed in
 ```bash
 make up       # Qdrant + TEI dependencies
 make run      # dependencies + source API on :8000, Swagger at /docs
+make ui       # Vue/Vite dev server on :5173 (run in a second terminal)
 # Or: make prod starts the complete Compose stack explicitly.
 ```
+
+For the Vue scaffold, start `make run` first, then run `make ui` in another
+terminal and open <http://127.0.0.1:5173>. The Vite server proxies API requests to
+FastAPI on port 8000. Install frontend dependencies once with
+`pnpm --dir vue-ui install` if `vue-ui/node_modules` is not present.
 
 Qdrant uses port 6333; TEI uses 8085. `make down` stops dev dependencies. `make clean`
 removes their containers while preserving data and playlist-operation state.
@@ -144,18 +151,27 @@ General playlist update/delete and automatic uncertain-outcome repair are deferr
 
 ## HTTP API
 
-| Method     | Path                                                            | Purpose                                             |
-| ---------- | --------------------------------------------------------------- | --------------------------------------------------- |
-| GET        | `/health`                                                       | Qdrant connectivity                                 |
-| GET        | `/api/config`                                                   | Public configuration with secrets excluded/redacted |
-| GET/DELETE | `/api/collections[/<name>]`                                     | List bindings / explicitly delete an index          |
-| POST       | `/api/search`                                                   | Query a Navidrome-native collection                 |
-| POST       | `/api/ingest`                                                   | Protected native library ingestion                  |
-| GET        | `/api/navidrome/connection`, `/libraries`, `/tracks`, `/lyrics` | Protected source inspection                         |
-| POST       | `/api/navidrome/playlists`                                      | Protected native private save                       |
-| GET        | `/api/navidrome/operations/<operation_id>?library_id=2`         | Protected save status/reconciliation                |
+| Method | Path                                                            | Purpose                                         |
+| ------ | --------------------------------------------------------------- | ----------------------------------------------- |
+| GET    | `/health`                                                       | Qdrant connectivity                             |
+| POST   | `/api/auth/login`                                               | Navidrome login; sets HttpOnly session cookie   |
+| POST   | `/api/auth/token`                                               | Non-browser bearer token exchange               |
+| GET    | `/api/auth/me`                                                  | Current user and accessible libraries           |
+| POST   | `/api/auth/logout`                                              | Revoke current session                          |
+| GET    | `/health`                                                       | Public health status                            |
+| GET    | `/api/config`, `/api/collections`                               | Authenticated configuration and visible indexes |
+| POST   | `/api/search`                                                   | Search an authorized collection                 |
+| POST   | `/api/ingest`                                                   | Admin-only native library ingestion             |
+| GET    | `/api/navidrome/connection`, `/libraries`, `/tracks`, `/lyrics` | Authenticated source inspection                 |
+| POST   | `/api/navidrome/playlists`                                      | Authenticated private playlist save             |
+| GET    | `/api/navidrome/operations/<operation_id>?library_id=2`         | Authenticated save status/reconciliation        |
 
-All `/api/navidrome/...` paths and native ingestion require `Authorization: Bearer <operator-token>` and a JSON body:
+Protected API routes accept the HttpOnly cookie for same-origin browser calls or a
+Resonance bearer token for non-browser clients. Vue never calls the token exchange
+endpoint and cannot read the cookie. Cookie-authenticated mutations require an
+allowed Origin. `/api/auth/token` exchanges Navidrome credentials for a bearer token
+with the same session and authorization scope. Ingestion and collection deletion
+additionally require the configured admin username. The ingest request body is:
 
 ```json
 {
@@ -189,25 +205,17 @@ Subsonic-compatible API. Resonance issues its own JWT for API calls. See
 
 ### Local Search and Ingestion PoC
 
-In one terminal, start the local dependencies and debug API:
+Start the local dependencies and API, then run the Vue development server:
 
 ```bash
 make run
+make ui
 ```
 
-`make run` binds the development API to loopback at `http://localhost:8000`. In a
-second terminal, serve the static page from the `ui/` directory on a different port:
-
-```bash
-cd ui
-python -m http.server 8080 --bind 127.0.0.1
-```
-
-Open `http://localhost:8080`, enter `RESONANCE__API_TOKEN` from your local `.env`,
-and load the available Navidrome libraries. The token stays in the page's memory and
-is sent only to protected library-listing and ingestion requests. The debug API allows
-the two local page origins on port 8080 for CORS; its dev server listens only on
-loopback. Do not expose this PoC setup to a network.
+The API binds to loopback at `http://localhost:8000`; Vite serves `http://127.0.0.1:5173`
+and proxies `/api`. Sign in with your Navidrome account. The `/ui` operator PoC is
+also same-origin through FastAPI. Debug HTTP is for local development only and must
+not be exposed to a network.
 
 The ingestion form defaults to 10 tracks. Clear the limit only when you intend to
 process the whole selected library; the request is synchronous and has no progress

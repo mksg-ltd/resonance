@@ -5,7 +5,13 @@ import sys
 from argparse import ArgumentParser
 from dataclasses import asdict
 
-from resonance.application.playlists import PlaylistSelection, create_playlist, get_operation
+from resonance.application.playlists import (
+    PlaylistSelection,
+    create_playlist,
+    ensure_legacy_operations_resolved,
+    get_operation,
+)
+from resonance.cli_auth import prompt_navidrome_credentials
 from resonance.config import Settings
 from resonance.errors import ApplicationError
 from resonance.navidrome import NavidromeClient
@@ -29,8 +35,9 @@ def main() -> None:
     source = None
     try:
         settings = Settings()
-        source = NavidromeClient(settings.navidrome)
+        source = NavidromeClient(settings.navidrome, prompt_navidrome_credentials())
         journal = SaveJournal(settings.journal_path)
+        ensure_legacy_operations_resolved(source, journal, settings.admin_user)
         if args.command == "create":
             result = create_playlist(
                 source,

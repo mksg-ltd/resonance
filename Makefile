@@ -1,4 +1,4 @@
-.PHONY: help up down clean run prod prod-down test lint install build
+.PHONY: help up down clean run ui prod prod-down test lint install build
 
 # Python settings and Docker Compose parse .env; Make must not reinterpret secrets.
 
@@ -29,6 +29,9 @@ clean: ## Remove dev dependency containers, preserving stored data
 run: up ## Start Qdrant + dev server (Swagger UI at /docs)
 	@printf "$(BLUE)Starting resonance at http://localhost:8000/docs$(RESET)\n"
 	uv run resonance-dev
+
+ui: ## Start the Vue/Vite development server at http://127.0.0.1:5173
+	cd vue-ui && pnpm dev
 
 prod: ## Start full stack (Qdrant + resonance + TEI)
 	@printf "$(BLUE)Starting production stack...$(RESET)\n"

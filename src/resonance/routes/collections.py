@@ -1,69 +1,80 @@
-"""Collections endpoint — list and manage Qdrant collections."""
+"""Caller-scoped collection listing and admin-only deletion."""
 
-from fastapi import APIRouter, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from resonance.application.collections import visible_collections
+from resonance.auth import Principal
+from resonance.errors import ApplicationError
+from resonance.navidrome import NavidromeClient, legacy_source_fingerprint
+from resonance.routes.auth import get_navidrome, require_admin
+
 router = APIRouter(prefix="/api")
+Source = Annotated[NavidromeClient, Depends(get_navidrome)]
 
 
 class CollectionInfo(BaseModel):
-    """Collection summary."""
+    """A collection summary visible to the authenticated Navidrome user."""
 
     name: str
     points_count: int
     provider: str | None = None
     model: str | None = None
     dimensions: int | None = None
-    source_id: str | None = None
-    library_id: str | None = None
-    index_fingerprint: str | None = None
+    source_id: str
+    library_id: str
+    index_fingerprint: str
+
+
+def _visible(request: Request, source: NavidromeClient):
+    libraries = {library.id for library in source.libraries()}
+    admin_user = request.app.state.settings.admin_user
+    legacy_fingerprint = (
+        legacy_source_fingerprint(request.app.state.settings.navidrome.base_url, admin_user)
+        if admin_user and request.app.state.settings.navidrome.base_url
+        else None
+    )
+    return visible_collections(
+        request.app.state.qdrant,
+        source.binding,
+        libraries,
+        legacy_fingerprint=legacy_fingerprint,
+    )
 
 
 @router.get("/collections", response_model=list[CollectionInfo])
-def list_collections(request: Request) -> list[CollectionInfo]:
-    """List all Qdrant collections with their metadata."""
-    qdrant = request.app.state.qdrant
-    collections = qdrant.get_collections().collections
-
-    result = []
-    for col in collections:
-        info = qdrant.get_collection(col.name)
-        points_count = info.points_count or 0
-
-        # Try to read collection metadata from point id=0
-        provider = None
-        model = None
-        dimensions = None
-        binding = {}
-        if points_count > 0:
-            try:
-                points = qdrant.retrieve(collection_name=col.name, ids=[0])
-                if points and points[0].payload and points[0].payload.get("_metadata"):
-                    payload = points[0].payload
-                    provider = payload.get("provider")
-                    model = payload.get("model")
-                    dimensions = payload.get("dimensions")
-                    binding = {key: payload.get(key) for key in ("source_id", "library_id", "index_fingerprint")}
-            except Exception:  # noqa: BLE001
-                pass
-
-        result.append(
-            CollectionInfo(
-                name=col.name,
-                points_count=points_count,
-                provider=provider,
-                model=model,
-                dimensions=dimensions,
-                **binding,
-            )
+def list_collections(request: Request, source: Source) -> list[CollectionInfo]:
+    """List only collections in libraries currently visible to this caller."""
+    return [
+        CollectionInfo(
+            name=item.name,
+            points_count=item.points_count,
+            provider=item.metadata.get("provider"),
+            model=item.metadata.get("model"),
+            dimensions=item.metadata.get("dimensions"),
+            source_id=item.metadata["source_id"],
+            library_id=item.metadata["library_id"],
+            index_fingerprint=item.metadata["index_fingerprint"],
         )
-
-    return result
+        for item in _visible(request, source)
+    ]
 
 
 @router.delete("/collections/{name}")
-def delete_collection(name: str, request: Request) -> dict:
-    """Drop a Qdrant collection."""
-    qdrant = request.app.state.qdrant
-    qdrant.delete_collection(name)
+def delete_collection(
+    name: str,
+    request: Request,
+    source: Source,
+    _admin: Annotated[Principal, Depends(require_admin)],
+) -> dict[str, str]:
+    """Delete an indexed collection only when it belongs to an admin-visible library."""
+    if name not in {item.name for item in _visible(request, source)}:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    try:
+        request.app.state.qdrant.delete_collection(name)
+    except Exception:  # noqa: BLE001 -- Qdrant SDK boundary
+        msg = "Cannot delete collection"
+        raise ApplicationError(msg, code="index_unavailable", status=502) from None
     return {"deleted": name}

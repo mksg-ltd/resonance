@@ -11,13 +11,11 @@ from resonance.application.library import get_lyrics, list_tracks
 from resonance.config import NavidromeConfig
 from resonance.errors import ApplicationError, NavidromeRejectedError
 from resonance.models import Track
-from resonance.navidrome import NavidromeClient
+from resonance.navidrome import NavidromeClient, NavidromeCredentials, source_binding
 
 
 def settings(**kwargs):
-    return NavidromeConfig(
-        base_url="https://music.test", user_id="operator", user_password="test-secret", _env_file=None, **kwargs
-    )
+    return NavidromeConfig(base_url="https://music.test", _env_file=None, **kwargs)
 
 
 def ok(**payload):
@@ -26,7 +24,14 @@ def ok(**payload):
 
 def client_for(handler, **kwargs):
     http = httpx.Client(transport=httpx.MockTransport(handler))
-    return NavidromeClient(settings(**kwargs), http)
+    return NavidromeClient(settings(**kwargs), NavidromeCredentials("operator", "test-secret"), http)
+
+
+def test_source_binding_is_stable_across_users_and_canonical_server_urls():
+    first = source_binding(NavidromeConfig(base_url="HTTPS://Music.Test:443/", _env_file=None))
+    second = source_binding(NavidromeConfig(base_url="https://music.test", _env_file=None))
+    assert first == second
+    assert source_binding(NavidromeConfig(base_url="https://other.test", _env_file=None)) != first
 
 
 def test_paged_tracks_have_server_identity_without_filesystem_paths():
@@ -145,11 +150,9 @@ def test_failed_envelopes_and_transport_errors_do_not_expose_credentials():
 def test_http_requires_explicit_trust_and_redirects_are_not_followed():
     with pytest.raises(ApplicationError, match="HTTPS"):
         NavidromeClient(
-            NavidromeConfig(base_url="http://music.test", user_id="user", user_password="secret", _env_file=None)
+            NavidromeConfig(base_url="http://music.test", _env_file=None), NavidromeCredentials("user", "secret")
         )
-    trusted = NavidromeConfig(
-        base_url="http://music.test", user_id="user", user_password="secret", allow_http=True, _env_file=None
-    )
+    trusted = NavidromeConfig(base_url="http://music.test", allow_http=True, _env_file=None)
     calls = []
 
     def redirect(request):
@@ -158,7 +161,7 @@ def test_http_requires_explicit_trust_and_redirects_are_not_followed():
 
     with httpx.Client(transport=httpx.MockTransport(redirect), follow_redirects=True) as http:
         with pytest.raises(ApplicationError):
-            NavidromeClient(trusted, http).inspect()
+            NavidromeClient(trusted, NavidromeCredentials("user", "secret"), http).inspect()
     assert len(calls) == 1
 
 
@@ -189,7 +192,8 @@ def test_read_only_application_and_cli_only_use_read_endpoints(monkeypatch, caps
     client = client_for(server)
     assert len(list_tracks(client, "2", 1)) == 1
     assert get_lyrics(client, "2", "one").lyrics_status == "missing"
-    monkeypatch.setattr(library, "NavidromeClient", lambda _: client)
+    monkeypatch.setattr(library, "NavidromeClient", lambda *_: client)
+    monkeypatch.setattr(library, "prompt_navidrome_credentials", lambda: client.credentials)
     monkeypatch.setattr("sys.argv", ["resonance-library", "tracks", "--library", "2", "--limit", "1"])
     library.main()
     assert json.loads(capsys.readouterr().out)[0]["song_id"] == "one"

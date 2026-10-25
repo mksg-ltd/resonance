@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import AliasChoices, BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -58,13 +58,11 @@ class OllamaProviderConfig(BaseModel):
 
 
 class NavidromeConfig(BaseSettings):
-    """One operator-configured Navidrome account, loaded without shell evaluation."""
+    """Navidrome server connection settings, loaded without shell evaluation."""
 
     model_config = SettingsConfigDict(env_prefix="NAVIDROME_", env_file=".env", extra="ignore")
 
     base_url: str | None = None
-    user_id: str | None = None  # Subsonic login username, not the internal account ID
-    user_password: SecretStr | None = None
     server_id: str = "home"
     allow_http: bool = False
     timeout: float = Field(default=20, gt=0, le=300)
@@ -89,13 +87,18 @@ class Settings(BaseSettings):
         env_nested_delimiter="__",
         env_file=".env",
         extra="ignore",
+        populate_by_name=True,
     )
 
-    debug: bool = False  # enables CORS, reload
+    debug: bool = False  # enables local HTTP and reload
     serve_docs: bool = False  # enables Swagger UI at /docs
+    trusted_proxy_ips: str = "127.0.0.1"
     qdrant: QdrantConfig = QdrantConfig()
     chunking: ChunkingConfig = ChunkingConfig()
     embedding: EmbeddingRuntimeConfig = Field(default_factory=EmbeddingRuntimeConfig)
     navidrome: NavidromeConfig = Field(default_factory=NavidromeConfig)
-    api_token: SecretStr | None = None
+    admin_user: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("RESONANCE_ADMIN_USER", "RESONANCE__ADMIN_USER"),
+    )
     journal_path: Path = Path("data/playlist-operations.sqlite3")

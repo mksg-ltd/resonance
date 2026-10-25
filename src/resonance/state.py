@@ -141,3 +141,40 @@ class SaveJournal:
                 "WHERE operation_id=? AND status != 'verified'",
                 (status, reason, operation_id),
             )
+
+    @external_errors("Playlist journal migration is unavailable")
+    def migrate_legacy_bindings(
+        self,
+        source_binding: dict[str, str],
+        legacy_fingerprint: str | None,
+        admin_username: str,
+        allowed_library_ids: set[str],
+    ) -> bool:
+        """Rebind provable old operator rows; report unresolved rows that cannot be proven."""
+        unresolved = False
+        active_statuses = {"submitting", "verifying", "unresolved"}
+        with self._transaction() as connection:
+            rows = connection.execute("SELECT operation_id,binding,status FROM save_operations").fetchall()
+            for row in rows:
+                binding = json.loads(row["binding"])
+                if binding.get("caller") != "operator" or binding.get("source_id") != source_binding.get("source_id"):
+                    continue
+                if (
+                    binding.get("server_fingerprint") == source_binding.get("server_fingerprint")
+                    and binding.get("caller") == admin_username
+                ):
+                    continue
+                proven = (
+                    legacy_fingerprint is not None
+                    and binding.get("server_fingerprint") == legacy_fingerprint
+                    and binding.get("library_id") in allowed_library_ids
+                )
+                if proven:
+                    migrated = {**binding, **source_binding, "caller": admin_username}
+                    connection.execute(
+                        "UPDATE save_operations SET binding=? WHERE operation_id=?",
+                        (canonical(migrated), row["operation_id"]),
+                    )
+                elif row["status"] in active_statuses:
+                    unresolved = True
+        return unresolved

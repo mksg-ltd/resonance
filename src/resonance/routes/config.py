@@ -1,15 +1,20 @@
 """Config endpoint — read-only current configuration."""
 
-from fastapi import APIRouter, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Request
+
+from resonance.auth import Principal
+from resonance.routes.auth import get_principal
 
 router = APIRouter(prefix="/api")
 
 
 @router.get("/config")
-def get_config(request: Request) -> dict:
+def get_config(request: Request, _principal: Annotated[Principal, Depends(get_principal)]) -> dict:
     """Return current configuration with secrets redacted."""
     settings = request.app.state.settings
-    data = settings.model_dump(mode="json", exclude={"navidrome", "api_token", "journal_path"})
+    data = settings.model_dump(mode="json", exclude={"navidrome", "journal_path"})
     data["navidrome"] = {"server_id": settings.navidrome.server_id, "configured": bool(settings.navidrome.base_url)}
     data["embedding"] = {
         "profile": settings.embedding.profile,
@@ -17,5 +22,5 @@ def get_config(request: Request) -> dict:
         "configured": bool(settings.embedding.base_url or settings.embedding.profile == "openai"),
         "api_key_configured": bool(settings.embedding.api_key and settings.embedding.api_key.get_secret_value()),
     }
-    data["authentication_configured"] = bool(settings.api_token)
+    data["authentication_configured"] = bool(settings.navidrome.base_url)
     return data

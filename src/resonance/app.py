@@ -7,14 +7,17 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from qdrant_client import QdrantClient
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.types import Scope
 
+from resonance.auth import AuthRuntime
 from resonance.config import Settings
 from resonance.embedders import close_embedders
 from resonance.errors import ApplicationError
+from resonance.routes.auth import router as auth_router
 from resonance.routes.collections import router as collections_router
 from resonance.routes.config import router as config_router
 from resonance.routes.health import router as health_router
@@ -23,6 +26,18 @@ from resonance.routes.navidrome import router as navidrome_router
 from resonance.routes.search import router as search_router
 
 logger = logging.getLogger(__name__)
+
+
+class SPAStaticFiles(StaticFiles):
+    """Serve the app entry point for frontend routes unknown to the asset server."""
+
+    async def get_response(self, path: str, scope: Scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as error:
+            if error.status_code != 404:
+                raise
+            return await super().get_response("index.html", scope)
 
 
 @asynccontextmanager
@@ -38,6 +53,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     try:
         yield
     finally:
+        app.state.auth_runtime.sessions.clear()
         qdrant.close()
         close_embedders()
 
@@ -54,26 +70,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         title="resonance",
         description="Semantic search over song lyrics",
         version="0.1.0",
+        openapi_url="/openapi.json" if settings.serve_docs else None,
         docs_url=docs_url,
         redoc_url=redoc_url,
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.state.auth_runtime = AuthRuntime(settings.admin_user)
 
     @app.exception_handler(ApplicationError)
     async def application_error(_request: Request, error: ApplicationError) -> JSONResponse:
         return JSONResponse(status_code=error.status, content={"detail": str(error), "code": error.code})
 
-    # CORS — allow static UI to call the API
-    if settings.debug:
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=["http://localhost:8080", "http://127.0.0.1:8080"],
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
-
     # Register routes
+    app.include_router(auth_router)
     app.include_router(health_router)
     app.include_router(search_router)
     app.include_router(ingest_router)
@@ -85,6 +95,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ui_dir = Path(__file__).resolve().parent.parent.parent / "ui"
     if ui_dir.is_dir():
         app.mount("/ui", StaticFiles(directory=ui_dir, html=True), name="ui")
+
+    vue_dir = Path(__file__).resolve().parent / "static" / "app"
+    if vue_dir.is_dir():
+        app.mount("/app", SPAStaticFiles(directory=vue_dir, html=True), name="app")
 
     return app
 
@@ -99,6 +113,8 @@ def cli() -> None:
         port=8000,
         reload=settings.debug,
         log_level="info",
+        proxy_headers=True,
+        forwarded_allow_ips=settings.trusted_proxy_ips,
     )
 
 
@@ -115,4 +131,5 @@ def dev() -> None:
         port=8000,
         reload=True,
         log_level="info",
+        proxy_headers=False,
     )

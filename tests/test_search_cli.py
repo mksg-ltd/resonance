@@ -39,7 +39,8 @@ def test_search_cli_ids_can_be_used_directly_by_save_cli(tmp_path, monkeypatch, 
         assert set(ids) == {"one", "two"}
         assert all("Source: home | Library: 2" in line for line in lines)
         monkeypatch.setattr(playlists, "Settings", lambda: settings)
-        monkeypatch.setattr(playlists, "NavidromeClient", lambda _: source)
+        monkeypatch.setattr(playlists, "NavidromeClient", lambda *_: source)
+        monkeypatch.setattr(playlists, "prompt_navidrome_credentials", lambda: source.credentials)
         monkeypatch.setattr(
             "sys.argv",
             [

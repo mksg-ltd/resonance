@@ -81,6 +81,52 @@ def read_metadata(qdrant: QdrantClient, collection: str) -> dict[str, Any]:
     return points[0].payload
 
 
+def migrate_legacy_metadata(
+    qdrant: QdrantClient,
+    collection: str,
+    desired: dict[str, Any],
+    legacy_fingerprint: str,
+) -> dict[str, Any]:
+    """Update only reserved metadata when the old account-bound source is proven."""
+    stored = read_metadata(qdrant, collection)
+    current = desired.get("server_fingerprint")
+    previous = stored.get("server_fingerprint")
+    if previous == current:
+        return stored
+    compatible = (
+        previous == legacy_fingerprint
+        and stored.get("schema_version") == desired.get("schema_version")
+        and stored.get("source_id") == desired.get("source_id")
+        and stored.get("library_id") == desired.get("library_id")
+        and stored.get("embedding_profile") == desired.get("embedding_profile")
+        and stored.get("index_fingerprint") == desired.get("index_fingerprint")
+    )
+    if not compatible:
+        fail(
+            "Collection source cannot be proven for safe migration; use a new collection or reingest",
+            code="collection_incompatible",
+            status=409,
+        )
+    try:
+        points = qdrant.retrieve(collection_name=collection, ids=[0], with_payload=True, with_vectors=True)
+        if not points or points[0].vector is None:
+            fail("Collection metadata vector is unavailable", code="collection_incompatible", status=409)
+        payload = {**(points[0].payload or {}), "server_fingerprint": current}
+        qdrant.upsert(
+            collection_name=collection,
+            points=[PointStruct(id=0, vector=points[0].vector, payload=payload)],
+            wait=True,
+        )
+    except Exception as error:
+        if getattr(error, "code", None) == "collection_incompatible":
+            raise
+        fail("Cannot migrate collection metadata", code="index_unavailable", status=502)
+    migrated = read_metadata(qdrant, collection)
+    if migrated.get("server_fingerprint") != current:
+        fail("Collection metadata migration did not verify", code="index_unavailable", status=502)
+    return migrated
+
+
 def desired_metadata(  # noqa: PLR0913
     binding: dict[str, str],
     library_id: str,

@@ -9,7 +9,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from resonance import embedders
 from resonance.application.ingest import run_ingest
 from resonance.navidrome import NavidromeClient
-from resonance.routes.auth import get_navidrome, require_operator
+from resonance.routes.auth import get_navidrome, require_admin
 
 router = APIRouter(prefix="/api")
 
@@ -30,7 +30,7 @@ class IngestRequest(BaseModel):
     max_tracks: int | None = Field(default=None, ge=1)
 
 
-@router.post("/ingest", dependencies=[Depends(require_operator)])
+@router.post("/ingest", dependencies=[Depends(require_admin)])
 def ingest(body: IngestRequest, request: Request, source: Annotated[NavidromeClient, Depends(get_navidrome)]) -> dict:
     profile_id = body.profile or request.app.state.settings.embedding.profile
     result = run_ingest(

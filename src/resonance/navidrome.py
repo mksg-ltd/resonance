@@ -6,7 +6,7 @@ import math
 import secrets
 import unicodedata
 from collections.abc import Iterator
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 from urllib.parse import urlsplit
 from xml.etree import ElementTree as ET
@@ -20,13 +20,51 @@ from resonance.models import ConnectionInfo, Library, LrcLine, ServerPlaylist, T
 MAX_RESPONSE_BYTES = 8_000_000
 
 
+@dataclass(frozen=True)
+class NavidromeCredentials:
+    """Credentials supplied by the authenticated caller, never global settings."""
+
+    username: str
+    password: str = field(repr=False)
+
+
+def canonical_server_url(value: str) -> str:
+    """Normalize the configured Navidrome endpoint for a stable server fingerprint."""
+    try:
+        parts = urlsplit(value.strip())
+        port = parts.port
+    except ValueError as error:
+        msg = "Invalid Navidrome server URL"
+        raise ApplicationError(msg, code="invalid_configuration", status=503) from error
+    if (
+        parts.scheme.lower() not in {"http", "https"}
+        or not parts.hostname
+        or any((parts.username, parts.password, parts.query, parts.fragment))
+    ):
+        msg = "Invalid Navidrome server URL"
+        raise ApplicationError(msg, code="invalid_configuration", status=503)
+    scheme = parts.scheme.lower()
+    host = parts.hostname.lower()
+    if port is not None and not ((scheme == "https" and port == 443) or (scheme == "http" and port == 80)):
+        host = f"[{host}]:{port}" if ":" in host else f"{host}:{port}"
+    elif ":" in host:
+        host = f"[{host}]"
+    path = "/" + parts.path.strip("/") if parts.path.strip("/") else ""
+    return f"{scheme}://{host}{path}"
+
+
 def source_binding(config: NavidromeConfig) -> dict[str, str]:
     """Index identity can be checked without opening an outbound HTTP client."""
-    if not config.base_url or not config.user_id:
+    if not config.base_url or not config.server_id.strip():
         msg = "Configure the Navidrome source before using its index"
         raise ApplicationError(msg, code="not_configured", status=503)
-    value = f"{config.base_url.rstrip('/')}\0{config.user_id}"
+    value = canonical_server_url(config.base_url)
     return {"source_id": config.server_id, "server_fingerprint": hashlib.sha256(value.encode()).hexdigest()}
+
+
+def legacy_source_fingerprint(base_url: str, username: str) -> str:
+    """Reproduce the pre-auth source fingerprint for proof-gated migrations."""
+    return hashlib.sha256(f"{base_url.rstrip('/')}\0{username}".encode()).hexdigest()
 
 
 def _protocol_error() -> ApplicationError:
@@ -52,11 +90,21 @@ def _rows(value: object) -> list[dict[str, Any]]:
 
 
 class NavidromeClient:
-    """Reusable synchronous client; a supplied HTTP client remains caller-owned."""
+    """Reusable user-scoped client; a supplied HTTP client remains caller-owned."""
 
-    def __init__(self, config: NavidromeConfig, http: httpx.Client | None = None) -> None:
-        if not config.base_url or not config.user_id or not config.user_password or not config.server_id.strip():
-            msg = "Configure the Navidrome address, username, password, and server ID"
+    def __init__(
+        self,
+        config: NavidromeConfig,
+        credentials: NavidromeCredentials,
+        http: httpx.Client | None = None,
+    ) -> None:
+        if (
+            not config.base_url
+            or not config.server_id.strip()
+            or not credentials.username.strip()
+            or not credentials.password
+        ):
+            msg = "Configure the Navidrome address and provide user credentials"
             raise ApplicationError(msg, code="not_configured", status=503)
         parts = urlsplit(config.base_url)
         if (
@@ -68,6 +116,7 @@ class NavidromeClient:
             msg = "Navidrome requires HTTPS; trusted local HTTP must be explicitly enabled"
             raise ApplicationError(msg, code="invalid_configuration", status=503)
         self.config = config
+        self.credentials = credentials
         self.base_url = config.base_url.rstrip("/")
         self._owns_http = http is None
         self._http = http or httpx.Client(timeout=config.timeout, follow_redirects=False)
@@ -84,12 +133,12 @@ class NavidromeClient:
     def request(self, endpoint: str, params: dict[str, Any] | None = None, *, xml: bool = False) -> dict[str, Any]:
         """Call a fixed API endpoint without returning raw upstream failures."""
         salt = secrets.token_hex(16)
-        password = self.config.user_password.get_secret_value() if self.config.user_password else ""
+        password = self.credentials.password
         # This digest is mandated by Subsonic, not a password-storage algorithm.
         token = hashlib.md5((password + salt).encode(), usedforsecurity=False).hexdigest()
         data = {
             **(params or {}),
-            "u": self.config.user_id,
+            "u": self.credentials.username,
             "t": token,
             "s": salt,
             "v": "1.16.1",

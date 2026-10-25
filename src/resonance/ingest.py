@@ -8,6 +8,7 @@ from dataclasses import asdict
 from qdrant_client import QdrantClient
 
 from resonance.application.ingest import run_ingest
+from resonance.cli_auth import prompt_navidrome_credentials
 from resonance.config import Settings
 from resonance.embedders import close_embedders, resolve_embedder
 from resonance.errors import ApplicationError
@@ -28,7 +29,7 @@ def main() -> None:
     source = None
     qdrant = None
     try:
-        source = NavidromeClient(settings.navidrome)
+        source = NavidromeClient(settings.navidrome, prompt_navidrome_credentials())
         qdrant = QdrantClient(
             url=settings.qdrant.url,
             api_key=settings.qdrant.api_key.get_secret_value() if settings.qdrant.api_key else None,

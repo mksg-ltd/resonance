@@ -6,6 +6,7 @@ from argparse import ArgumentParser
 from dataclasses import asdict
 
 from resonance.application.library import get_lyrics, list_tracks
+from resonance.cli_auth import prompt_navidrome_credentials
 from resonance.config import Settings
 from resonance.errors import ApplicationError
 from resonance.navidrome import NavidromeClient
@@ -26,7 +27,8 @@ def main() -> None:
     args = parser.parse_args()
     client = None
     try:
-        client = NavidromeClient(Settings().navidrome)
+        settings = Settings()
+        client = NavidromeClient(settings.navidrome, prompt_navidrome_credentials())
         if args.command == "inspect":
             result = asdict(client.inspect())
         elif args.command == "libraries":

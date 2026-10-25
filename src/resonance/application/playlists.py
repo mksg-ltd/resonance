@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 
 from resonance.errors import ApplicationError, NavidromeRejectedError, external_errors, fail
-from resonance.navidrome import NavidromeClient
+from resonance.navidrome import NavidromeClient, legacy_source_fingerprint
 from resonance.state import SaveJournal, SaveOperation
 
 
@@ -40,10 +40,38 @@ class PlaylistSelection:
         }
 
 
-def caller_binding(source: NavidromeClient, library_id: str, caller: str) -> dict[str, str]:
-    if caller != "operator":
-        fail("Caller cannot save playlists", code="forbidden", status=403)
-    return {**source.binding, "library_id": library_id, "caller": caller}
+def caller_binding(source: NavidromeClient, library_id: str, caller: str | None = None) -> dict[str, str]:
+    identity = caller or source.credentials.username
+    return {**source.binding, "library_id": library_id, "caller": identity}
+
+
+def migrate_legacy_operations(
+    source: NavidromeClient,
+    journal: SaveJournal,
+    admin_username: str | None,
+) -> bool:
+    """Move provable operator rows to the authenticated admin caller binding."""
+    if not admin_username or source.credentials.username != admin_username:
+        return False
+    if source.config.base_url is None:
+        return False
+    legacy = legacy_source_fingerprint(source.config.base_url, admin_username)
+    allowed_libraries = {library.id for library in source.libraries()}
+    return journal.migrate_legacy_bindings(source.binding, legacy, admin_username, allowed_libraries)
+
+
+def ensure_legacy_operations_resolved(
+    source: NavidromeClient,
+    journal: SaveJournal,
+    admin_username: str | None,
+) -> None:
+    """Block playlist operations when a pending old binding cannot be proven."""
+    if migrate_legacy_operations(source, journal, admin_username):
+        fail(
+            "An unresolved legacy playlist save needs reconciliation before playlist operations",
+            code="legacy_operation_unresolved",
+            status=409,
+        )
 
 
 def _gate(source: NavidromeClient) -> None:
@@ -87,7 +115,7 @@ def _reconcile(source: NavidromeClient, journal: SaveJournal, operation: SaveOpe
         expected = operation.request
         matches = (
             playlist.id == operation.playlist_id
-            and playlist.owner == source.config.user_id
+            and playlist.owner == source.credentials.username
             and playlist.name == expected["name"]
             and playlist.public is False
             and playlist.song_count == len(expected["song_ids"])
@@ -103,7 +131,7 @@ def _reconcile(source: NavidromeClient, journal: SaveJournal, operation: SaveOpe
 
 @external_errors("Playlist save interrupted; inspect the same operation key before retrying")
 def create_playlist(
-    source: NavidromeClient, journal: SaveJournal, selection: PlaylistSelection, *, caller: str = "operator"
+    source: NavidromeClient, journal: SaveJournal, selection: PlaylistSelection, *, caller: str | None = None
 ) -> SaveOperation:
     selection.validate()
     binding = caller_binding(source, selection.library_id, caller)
@@ -128,6 +156,6 @@ def create_playlist(
 
 @external_errors("Playlist status is unavailable")
 def get_operation(
-    source: NavidromeClient, journal: SaveJournal, operation_id: str, library_id: str, *, caller: str = "operator"
+    source: NavidromeClient, journal: SaveJournal, operation_id: str, library_id: str, *, caller: str | None = None
 ) -> SaveOperation:
     return _reconcile(source, journal, journal.get(operation_id, caller_binding(source, library_id, caller)))

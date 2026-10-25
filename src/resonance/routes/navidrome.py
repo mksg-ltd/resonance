@@ -7,14 +7,21 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from resonance.application.library import get_lyrics, list_tracks
-from resonance.application.playlists import PlaylistSelection, create_playlist, get_operation
+from resonance.application.playlists import (
+    PlaylistSelection,
+    create_playlist,
+    ensure_legacy_operations_resolved,
+    get_operation,
+)
+from resonance.auth import Principal
+from resonance.errors import fail
 from resonance.navidrome import NavidromeClient
-from resonance.routes.auth import get_navidrome, require_operator
+from resonance.routes.auth import get_navidrome, get_principal, require_admin
 from resonance.state import SaveJournal, SaveOperation
 
-router = APIRouter(prefix="/api/navidrome", dependencies=[Depends(require_operator)])
+router = APIRouter(prefix="/api/navidrome")
 Source = Annotated[NavidromeClient, Depends(get_navidrome)]
-Caller = Annotated[str, Depends(require_operator)]
+Caller = Annotated[Principal, Depends(get_principal)]
 
 
 class CreatePlaylistRequest(BaseModel):
@@ -36,7 +43,7 @@ def connection(source: Source) -> dict:
 
 
 @router.get("/libraries")
-def libraries(source: Source) -> list[dict]:
+def libraries(source: Source, _admin: Annotated[Principal, Depends(require_admin)]) -> list[dict]:
     return [asdict(item) for item in source.libraries()]
 
 
@@ -53,9 +60,17 @@ def lyrics(source: Source, library_id: str, song_id: str) -> dict:
 @router.post("/playlists")
 def save(body: CreatePlaylistRequest, request: Request, source: Source, caller: Caller) -> SaveOperation:
     selection = PlaylistSelection(**body.model_dump())
-    return create_playlist(source, journal(request), selection, caller=caller)
+    save_journal = journal(request)
+    if caller.is_admin:
+        ensure_legacy_operations_resolved(source, save_journal, request.app.state.settings.admin_user)
+    return create_playlist(source, save_journal, selection, caller=caller.username)
 
 
 @router.get("/operations/{operation_id}")
 def status(operation_id: str, library_id: str, request: Request, source: Source, caller: Caller) -> SaveOperation:
-    return get_operation(source, journal(request), operation_id, library_id, caller=caller)
+    if library_id not in {library.id for library in source.libraries()}:
+        fail("Library not found", code="library_not_found", status=404)
+    save_journal = journal(request)
+    if caller.is_admin:
+        ensure_legacy_operations_resolved(source, save_journal, request.app.state.settings.admin_user)
+    return get_operation(source, save_journal, operation_id, library_id, caller=caller.username)

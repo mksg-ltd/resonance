@@ -12,7 +12,7 @@ from qdrant_client import QdrantClient
 from resonance import playlists
 from resonance.app import create_app
 from resonance.config import Settings
-from resonance.navidrome import NavidromeClient
+from resonance.models import Library
 from tests.test_indexing import FixtureEmbedder
 from tests.test_save_operations import SaveServer, selection
 
@@ -46,7 +46,8 @@ def native(tmp_path, monkeypatch):
     http = httpx.Client(transport=httpx.MockTransport(transport))
     source._http = http
     settings = Settings(
-        api_token="operator-token",
+        debug=True,
+        admin_user="operator",
         navidrome=source.config,
         journal_path=tmp_path / "operations.sqlite3",
         _env_file=None,
@@ -55,14 +56,90 @@ def native(tmp_path, monkeypatch):
     app.state.navidrome = source
     monkeypatch.setattr("resonance.app.QdrantClient", lambda **_: qdrant)
     monkeypatch.setattr("resonance.embedders.resolve_embedder", lambda *_: embedder)
-    with TestClient(app) as client:
+    login_client = MagicMock()
+    login_client.libraries.return_value = [Library("2", "English")]
+    monkeypatch.setattr("resonance.routes.auth.NavidromeClient", lambda *_: login_client)
+    with TestClient(app, base_url="http://localhost:8000") as client:
+        login = client.post(
+            "/api/auth/login",
+            json={"username": "operator", "password": "test-secret"},
+            headers={"Origin": "http://localhost:8000"},
+        )
+        assert login.status_code == 200
+        assert "access_token" not in login.json()
+        assert "httponly" in login.headers["set-cookie"].lower()
+        server.calls.clear()
         yield client, app, server, source, embedder, qdrant, settings
     http.close()
     original.close()
 
 
 def auth():
-    return {"Authorization": "Bearer operator-token"}
+    return {"Origin": "http://localhost:8000"}
+
+
+def test_token_exchange_uses_bearer_auth_and_logout_revokes_its_session(native):
+    client, *_ = native
+    response = client.post("/api/auth/token", json={"username": "operator", "password": "test-secret"})
+    assert response.status_code == 200
+    token = response.json()["access_token"]
+    bearer = {"Authorization": f"Bearer {token}"}
+    assert client.get("/api/config", headers=bearer).status_code == 200
+    assert client.post("/api/auth/logout", headers=bearer).status_code == 204
+    assert client.get("/api/config", headers=bearer).status_code == 401
+
+
+def test_regular_user_uses_their_own_library_grants_and_playlist_identity(native, monkeypatch):
+    client, app, server, _source, _embedder, _qdrant, _settings = native
+    indexed = client.post(
+        "/api/ingest",
+        headers=auth(),
+        json={"provider": "fixture", "library_id": "2", "collection": "admin-library"},
+    )
+    assert indexed.status_code == 200
+    del app.state.navidrome
+
+    def user_source(config, credentials):
+        server.owner = credentials.username
+        return server.client(username=credentials.username)
+
+    monkeypatch.setattr("resonance.routes.auth.NavidromeClient", user_source)
+    login = client.post(
+        "/api/auth/login",
+        headers={"Origin": "http://localhost:8000"},
+        json={"username": "listener", "password": "test-secret"},
+    )
+    assert login.status_code == 200
+    assert login.json()["is_admin"] is False
+    assert login.json()["libraries"] == [{"id": "3", "name": "Restricted"}]
+    assert client.get("/api/navidrome/libraries", headers=auth()).status_code == 403
+    assert client.get("/api/collections", headers=auth()).json() == []
+    guessed = client.post(
+        "/api/search",
+        headers=auth(),
+        json={"query": "hidden library", "collection": "admin-library"},
+    )
+    assert guessed.status_code == 404
+
+    saved = client.post(
+        "/api/navidrome/playlists",
+        headers=auth(),
+        json=body(operation_id="listener-save", library_id="3", song_ids=["one", "two"]),
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["status"] == "verified"
+    assert server.owner == "listener"
+    assert server.created[0]["song_ids"] == ["one", "two"]
+
+
+def test_cookie_mutations_reject_cross_site_origin(native):
+    client, *_ = native
+    response = client.post(
+        "/api/ingest",
+        json={"provider": "fixture", "library_id": "2"},
+        headers={"Origin": "http://attacker.invalid"},
+    )
+    assert response.status_code == 403
 
 
 def body(**kwargs):
@@ -80,8 +157,8 @@ def test_http_full_native_flow_and_cli_same_key_parity(native, monkeypatch, caps
     indexed = client.post(
         "/api/ingest", headers=auth(), json={"provider": "fixture", "library_id": "2", "collection": "native"}
     )
-    assert indexed.status_code == 200 and indexed.json()["tracks_processed"] == 3
-    hits = client.post("/api/search", json={"query": "paper stars", "collection": "native", "limit": 3})
+    assert indexed.status_code == 200 and indexed.json()["tracks_processed"] == 3, indexed.text
+    hits = client.post("/api/search", headers=auth(), json={"query": "paper stars", "collection": "native", "limit": 3})
     assert hits.status_code == 200
     ids = [hit["song_id"] for hit in hits.json()["results"]]
     saved = client.post("/api/navidrome/playlists", headers=auth(), json=body(song_ids=ids))
@@ -89,7 +166,8 @@ def test_http_full_native_flow_and_cli_same_key_parity(native, monkeypatch, caps
     assert server.created[0]["song_ids"] == ids
     calls = len(embedder.calls)
     monkeypatch.setattr(playlists, "Settings", lambda: settings)
-    monkeypatch.setattr(playlists, "NavidromeClient", lambda _: source)
+    monkeypatch.setattr(playlists, "NavidromeClient", lambda *_: source)
+    monkeypatch.setattr(playlists, "prompt_navidrome_credentials", lambda: source.credentials)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -115,18 +193,23 @@ def test_http_full_native_flow_and_cli_same_key_parity(native, monkeypatch, caps
 
 def test_unauthorized_and_unconfigured_requests_make_no_external_calls_or_journal(native):
     client, app, server, source, embedder, qdrant, settings = native
+    unauthenticated = TestClient(client.app, base_url="http://localhost:8000")
     for method, path, kwargs in [
         ("get", "/api/navidrome/connection", {}),
         ("get", "/api/navidrome/operations/one?library_id=2", {}),
         ("post", "/api/navidrome/playlists", {"json": body()}),
         ("post", "/api/ingest", {"json": {"provider": "fixture", "library_id": "2"}}),
     ]:
-        assert getattr(client, method)(path, **kwargs).status_code == 401
-        assert getattr(client, method)(path, headers={"Authorization": "Bearer wrong"}, **kwargs).status_code == 401
+        assert getattr(unauthenticated, method)(path, **kwargs).status_code == 401
+        assert (
+            getattr(unauthenticated, method)(path, headers={"Authorization": "Bearer wrong"}, **kwargs).status_code
+            == 401
+        )
     assert not server.calls and not settings.journal_path.exists() and not embedder.calls
-    settings.api_token = None
-    assert client.post("/api/navidrome/playlists", json=body()).status_code == 503
+    app.state.auth_runtime.admin_user = None
+    assert client.post("/api/ingest", json={"provider": "fixture", "library_id": "2"}).status_code == 403
     assert not server.calls
+    assert client.get("/api/navidrome/libraries", headers=auth()).status_code == 403
     config = client.get("/api/config").text
     assert "test-secret" not in config and "operator-token" not in config and "music.test" not in config
 
@@ -159,7 +242,8 @@ def test_readback_mismatch_and_cli_status_report_unresolved(native, monkeypatch,
     saved = client.post("/api/navidrome/playlists", headers=auth(), json=body())
     assert saved.json()["status"] == "unresolved"
     monkeypatch.setattr(playlists, "Settings", lambda: settings)
-    monkeypatch.setattr(playlists, "NavidromeClient", lambda _: source)
+    monkeypatch.setattr(playlists, "NavidromeClient", lambda *_: source)
+    monkeypatch.setattr(playlists, "prompt_navidrome_credentials", lambda: source.credentials)
     monkeypatch.setattr("sys.argv", ["resonance-playlist", "status", "--operation-id", "operation-1", "--library", "2"])
     with pytest.raises(SystemExit) as exit:
         playlists.main()
@@ -177,7 +261,7 @@ def test_owned_source_dependency_is_closed_after_request(native, monkeypatch):
     del app.state.navidrome
     close = MagicMock()
     source.close = close
-    monkeypatch.setattr("resonance.routes.auth.NavidromeClient", lambda _: source)
+    monkeypatch.setattr("resonance.routes.auth.NavidromeClient", lambda *_: source)
     assert client.get("/api/navidrome/connection", headers=auth()).status_code == 200
     close.assert_called_once()
 

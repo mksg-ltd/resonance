@@ -10,7 +10,7 @@ services:
     build: .
     env_file: .env
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./ui:/app/ui:ro
       - playlist_state:/app/state
@@ -19,6 +19,7 @@ services:
       - RESONANCE__DEBUG=true
       - RESONANCE__SERVE_DOCS=true
       - RESONANCE__QDRANT__URL=http://qdrant:6333
+      - FORWARDED_ALLOW_IPS=${RESONANCE__TRUSTED_PROXY_IPS:-127.0.0.1}
     depends_on:
       - qdrant
     healthcheck:

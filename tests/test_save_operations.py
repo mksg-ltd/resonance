@@ -14,7 +14,7 @@ import pytest
 from resonance.application.playlists import PlaylistSelection, caller_binding, create_playlist, get_operation
 from resonance.config import NavidromeConfig
 from resonance.errors import ApplicationError
-from resonance.navidrome import NavidromeClient
+from resonance.navidrome import NavidromeClient, NavidromeCredentials, legacy_source_fingerprint
 from resonance.state import SaveJournal
 
 
@@ -28,6 +28,7 @@ class SaveServer:
         self.overrides = {}
         self.members = ["one", "two", "three"]
         self.names = []
+        self.owner = "operator"
         self.stale = None
         self.before_create = None
 
@@ -44,9 +45,11 @@ class SaveServer:
         if endpoint == "getOpenSubsonicExtensions":
             return self.ok(openSubsonicExtensions=[{"name": "formPost", "versions": [1]}])
         if endpoint == "getMusicFolders":
-            return self.ok(musicFolders={"musicFolder": [{"id": "2", "name": "English"}]})
+            user = form["u"][0]
+            library = {"id": "3", "name": "Restricted"} if user == "listener" else {"id": "2", "name": "English"}
+            return self.ok(musicFolders={"musicFolder": [library]})
         if endpoint == "search3":
-            assert form["musicFolderId"] == ["2"]
+            assert form["musicFolderId"][0] in {"2", "3"}
             songs = [{"id": item, "title": "Fixture"} for item in self.members]
             return self.ok(searchResult3={"song": songs if form["songOffset"] == ["0"] else []})
         if endpoint == "getSong":
@@ -59,7 +62,9 @@ class SaveServer:
             if self.before_create:
                 self.before_create()
             if self.create_mode == "rejected":
-                return httpx.Response(200, content='<subsonic-response status="failed"><error code="50"/></subsonic-response>')
+                return httpx.Response(
+                    200, content='<subsonic-response status="failed"><error code="50"/></subsonic-response>'
+                )
             self.created.append({"id": f"p-{len(self.created)}", "name": form["name"][0], "song_ids": form["songId"]})
             if self.create_mode == "timeout":
                 raise httpx.ReadTimeout("credential should not leak", request=request)
@@ -69,22 +74,36 @@ class SaveServer:
                 return httpx.Response(500)
             if self.create_mode == "crash":
                 raise KeyboardInterrupt("simulated process interruption")
-            return httpx.Response(200, content=f'<subsonic-response status="ok"><playlist id="{self.created[-1]["id"]}"/></subsonic-response>')
+            return httpx.Response(
+                200,
+                content=f'<subsonic-response status="ok"><playlist id="{self.created[-1]["id"]}"/></subsonic-response>',
+            )
         if endpoint == "getPlaylist":
             if self.read_mode == "timeout":
                 raise httpx.ReadTimeout("private response", request=request)
             playlist = next(item for item in self.created if item["id"] == form["id"][0])
-            attributes = {"id": playlist["id"], "name": playlist["name"], "owner": "operator", "public": "false", "songCount": str(len(playlist["song_ids"]))}
+            attributes = {
+                "id": playlist["id"],
+                "name": playlist["name"],
+                "owner": self.owner,
+                "public": "false",
+                "songCount": str(len(playlist["song_ids"])),
+            }
             attributes.update(self.overrides)
             ids = playlist["song_ids"] if self.read_mode != "wrong_order" else list(reversed(playlist["song_ids"]))
             attrs = " ".join(f"{key}={quoteattr(value)}" for key, value in attributes.items() if value is not None)
-            entries = "".join(f'<entry id={quoteattr(item)}/>' for item in ids)
-            return httpx.Response(200, content=f'<subsonic-response status="ok"><playlist {attrs}>{entries}</playlist></subsonic-response>')
+            entries = "".join(f"<entry id={quoteattr(item)}/>" for item in ids)
+            return httpx.Response(
+                200,
+                content=f'<subsonic-response status="ok"><playlist {attrs}>{entries}</playlist></subsonic-response>',
+            )
         raise AssertionError(endpoint)
 
-    def client(self, **kwargs):
-        config = NavidromeConfig(base_url="https://music.test", user_id="operator", user_password="test-secret", _env_file=None, **kwargs)
-        return NavidromeClient(config, httpx.Client(transport=httpx.MockTransport(self)))
+    def client(self, *, username="operator", **kwargs):
+        config = NavidromeConfig(base_url="https://music.test", _env_file=None, **kwargs)
+        return NavidromeClient(
+            config, NavidromeCredentials(username, "test-secret"), httpx.Client(transport=httpx.MockTransport(self))
+        )
 
 
 def selection(**kwargs):
@@ -106,7 +125,9 @@ def test_verified_ordered_save_persists_and_same_key_restart_never_recreates(tmp
     assert "test-secret" not in str(row) and "lyrics" not in str(row)
 
 
-@pytest.mark.parametrize("change", [dict(name="Changed"), dict(song_ids=["one", "three", "two"]), dict(library_id="other")])
+@pytest.mark.parametrize(
+    "change", [dict(name="Changed"), dict(song_ids=["one", "three", "two"]), dict(library_id="other")]
+)
 def test_global_key_conflicts_on_changed_payload_or_scope(tmp_path, change):
     server, journal = SaveServer(), SaveJournal(tmp_path / "j.sqlite3")
     create_playlist(server.client(), journal, selection())
@@ -116,9 +137,51 @@ def test_global_key_conflicts_on_changed_payload_or_scope(tmp_path, change):
     with pytest.raises(ApplicationError):
         create_playlist(server.client(server_id="rebuilt"), journal, selection())
     changed_account = server.client()
-    changed_account.config.user_id = "another-account"
+    changed_account.credentials = NavidromeCredentials("another-account", "test-secret")
     with pytest.raises(ApplicationError):
         create_playlist(changed_account, journal, selection())
+
+
+def test_legacy_save_binding_migrates_proven_state_without_losing_operation(tmp_path):
+    source = SaveServer().client()
+    journal = SaveJournal(tmp_path / "legacy.sqlite3")
+    old_binding = {
+        **source.binding,
+        "server_fingerprint": legacy_source_fingerprint("https://music.test", "operator"),
+        "library_id": "2",
+        "caller": "operator",
+    }
+    operation = selection(operation_id="legacy-operation")
+    journal.prepare(operation.operation_id, old_binding, operation.payload)
+    assert journal.claim(operation.operation_id)
+    journal.record_id(operation.operation_id, "saved-playlist")
+    journal.outcome(operation.operation_id, "unresolved", "readback_unavailable")
+
+    blocked = journal.migrate_legacy_bindings(source.binding, old_binding["server_fingerprint"], "admin", {"2"})
+    migrated_binding = {**source.binding, "library_id": "2", "caller": "admin"}
+    migrated = journal.get(operation.operation_id, migrated_binding)
+
+    assert not blocked
+    assert migrated.status == "unresolved"
+    assert migrated.playlist_id == "saved-playlist"
+    assert migrated.request == operation.payload
+
+
+def test_unproven_unresolved_save_binding_blocks_without_mutation(tmp_path):
+    source = SaveServer().client()
+    journal = SaveJournal(tmp_path / "unknown-legacy.sqlite3")
+    old_binding = {**source.binding, "server_fingerprint": "unknown", "library_id": "2", "caller": "operator"}
+    operation = selection(operation_id="legacy-unproven")
+    journal.prepare(operation.operation_id, old_binding, operation.payload)
+    journal.claim(operation.operation_id)
+    before = journal.get(operation.operation_id, old_binding)
+
+    blocked = journal.migrate_legacy_bindings(source.binding, None, "admin", {"2"})
+    after = journal.get(operation.operation_id, old_binding)
+
+    assert blocked
+    assert after.status == before.status == "submitting"
+    assert after.binding == before.binding
 
 
 @pytest.mark.parametrize("mode", ["timeout", "no_id", "http500"])
@@ -152,7 +215,18 @@ def test_known_id_survives_failed_readback_then_reconciles_without_create(tmp_pa
     assert result.status == "verified" and len(server.created) == 1
 
 
-@pytest.mark.parametrize("overrides,mode", [({"public": "true"}, "ok"), ({"public": None}, "ok"), ({"owner": "other"}, "ok"), ({"name": "Other"}, "ok"), ({"songCount": "99"}, "ok"), ({"id": "other-id"}, "ok"), ({}, "wrong_order")])
+@pytest.mark.parametrize(
+    "overrides,mode",
+    [
+        ({"public": "true"}, "ok"),
+        ({"public": None}, "ok"),
+        ({"owner": "other"}, "ok"),
+        ({"name": "Other"}, "ok"),
+        ({"songCount": "99"}, "ok"),
+        ({"id": "other-id"}, "ok"),
+        ({}, "wrong_order"),
+    ],
+)
 def test_readback_mismatch_is_never_verified_or_repaired(tmp_path, overrides, mode):
     server = SaveServer()
     server.overrides, server.read_mode = overrides, mode
@@ -191,17 +265,22 @@ def test_preflight_rejects_stale_duplicate_or_out_of_scope_ids_and_duplicate_nam
     with pytest.raises(ApplicationError) as error:
         create_playlist(server.client(), journal, selection())
     assert error.value.code == "duplicate_name" and not server.created
-    assert create_playlist(server.client(), journal, selection(operation_id="ack", allow_duplicate_name=True)).status == "verified"
+    assert (
+        create_playlist(server.client(), journal, selection(operation_id="ack", allow_duplicate_name=True)).status
+        == "verified"
+    )
 
 
 def test_independent_sqlite_connections_claim_same_prepared_key_once(tmp_path):
     path, server = tmp_path / "j.sqlite3", SaveServer()
     barrier = Barrier(2)
+
     def worker():
         journal = SaveJournal(path)
         journal.prepare("same", caller_binding(server.client(), "2", "operator"), selection().payload)
         barrier.wait(timeout=5)
         return journal.claim("same")
+
     with ThreadPoolExecutor(max_workers=2) as executor:
         assert sorted(executor.map(lambda _: worker(), range(2))) == [False, True]
 
@@ -211,17 +290,22 @@ def test_concurrent_application_calls_create_once_and_persist_before_network(tmp
     SaveJournal(path)
     barrier = Barrier(2)
     original_names = server.client().playlist_names
+
     def worker():
         source = server.client()
+
         def names():
             result = original_names()
             barrier.wait(timeout=5)
             return result
+
         source.playlist_names = names
         return create_playlist(source, SaveJournal(path), selection())
+
     def assert_submitting():
         operation = SaveJournal(path).get("operation-1", caller_binding(server.client(), "2", "operator"))
         assert operation.status == "submitting"
+
     server.before_create = assert_submitting
     with ThreadPoolExecutor(max_workers=2) as executor:
         results = list(executor.map(lambda _: worker(), range(2)))

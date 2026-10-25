@@ -8,13 +8,13 @@ import pytest
 from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct
 
-from resonance.application.indexing import digest, lyric_hash, read_metadata, song_state
+from resonance.application.indexing import digest, lyric_hash, migrate_legacy_metadata, read_metadata, song_state
 from resonance.application.ingest import run_ingest
 from resonance.application.search import run_search
 from resonance.config import NavidromeConfig, Settings
 from resonance.errors import ApplicationError
-from resonance.models import LrcLine, Track
-from resonance.navidrome import source_binding
+from resonance.models import Library, LrcLine, Track
+from resonance.navidrome import legacy_source_fingerprint, source_binding
 
 
 class FixtureEmbedder:
@@ -38,15 +38,16 @@ class FixtureEmbedder:
 
 class FixtureSource:
     def __init__(self, tracks=None):
-        self.config = NavidromeConfig(
-            base_url="https://music.test", user_id="operator", user_password="test-secret", _env_file=None
-        )
+        self.config = NavidromeConfig(base_url="https://music.test", _env_file=None)
         self.binding = source_binding(self.config)
         self.items = tracks if tracks is not None else [track("one"), track("two")]
 
     def tracks(self, library_id):
         assert library_id == "2"
         yield from deepcopy(self.items)
+
+    def libraries(self):
+        return [Library("2", "English")]
 
     def lyrics(self, item):
         return item
@@ -148,6 +149,53 @@ def test_hashes_ignore_display_metadata_and_normalize_unicode():
     assert lyric_hash(item) == lyric_hash(replace(item, artist="Renamed", album="Retagged", lines=[LrcLine(0, "café")]))
     assert lyric_hash(item) != lyric_hash(replace(item, lines=[LrcLine(1, "café")]))
     assert digest({"model": "one"}) != digest({"model": "two"})
+
+
+def test_legacy_metadata_migration_updates_only_reserved_point_and_is_idempotent():
+    with closing(QdrantClient(":memory:")) as qdrant:
+        source, embedder = FixtureSource([track("one")]), FixtureEmbedder()
+        ingest(qdrant, source, embedder)
+        desired = read_metadata(qdrant, "native")
+        point_ids_before = {str(point.id) for point in qdrant.scroll("native", limit=100, with_payload=False)[0]}
+        assert len(point_ids_before) == 3
+        previous_fingerprint = legacy_source_fingerprint("https://music.test", "operator")
+        previous = {**desired, "server_fingerprint": previous_fingerprint}
+        qdrant.upsert(
+            collection_name="native",
+            points=[PointStruct(id=0, vector=[0.0, 0.0, 0.0], payload=previous)],
+            wait=True,
+        )
+
+        migrated = migrate_legacy_metadata(qdrant, "native", desired, previous_fingerprint)
+        repeated = migrate_legacy_metadata(qdrant, "native", desired, previous_fingerprint)
+        point_ids_after = {str(point.id) for point in qdrant.scroll("native", limit=100, with_payload=False)[0]}
+
+        assert migrated["server_fingerprint"] == desired["server_fingerprint"]
+        assert repeated == migrated
+        assert point_ids_after == point_ids_before
+        assert qdrant.get_collection("native").points_count == 3
+
+
+def test_unproven_legacy_metadata_refuses_migration_without_mutation():
+    with closing(QdrantClient(":memory:")) as qdrant:
+        source, embedder = FixtureSource([track("one")]), FixtureEmbedder()
+        ingest(qdrant, source, embedder)
+        desired = read_metadata(qdrant, "native")
+        legacy = {**desired, "server_fingerprint": "not-a-proven-legacy-fingerprint"}
+        qdrant.upsert(
+            collection_name="native",
+            points=[PointStruct(id=0, vector=[0.0, 0.0, 0.0], payload=legacy)],
+            wait=True,
+        )
+        before_ids = {str(point.id) for point in qdrant.scroll("native", limit=100, with_payload=False)[0]}
+
+        with pytest.raises(ApplicationError) as error:
+            migrate_legacy_metadata(qdrant, "native", desired, "different-proof")
+
+        after_ids = {str(point.id) for point in qdrant.scroll("native", limit=100, with_payload=False)[0]}
+        assert error.value.status == 409
+        assert after_ids == before_ids
+        assert read_metadata(qdrant, "native")["server_fingerprint"] == legacy["server_fingerprint"]
 
 
 def test_missing_lyrics_and_bounded_run_do_not_mark_success_or_prune():

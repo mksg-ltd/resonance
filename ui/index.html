@@ -158,6 +158,8 @@
       .controls input[type="password"] {
         min-width: 260px;
       }
+      #login-panel { margin-bottom: 18px; }
+      #app-panels[hidden], #login-panel[hidden] { display: none; }
       @media (max-width: 600px) {
         .controls .field {
           width: 100%;
@@ -173,12 +175,28 @@
   <body>
     <h1>resonance</h1>
 
-    <section class="panel">
+    <section class="panel" id="login-panel">
+      <h2>Sign in with Navidrome</h2>
+      <div class="controls">
+        <div class="field"><label for="username">Username</label><input id="username" autocomplete="username" /></div>
+        <div class="field"><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" /></div>
+        <div class="field"><label>&nbsp;</label><button id="login-btn" onclick="login()">Sign in</button></div>
+      </div>
+      <div id="login-status" class="status" role="status"></div>
+    </section>
+
+    <div id="app-panels" hidden>
+    <div class="controls" style="justify-content: space-between">
+      <div id="session-label" class="meta"></div>
+      <button class="quiet" onclick="logout()">Sign out</button>
+    </div>
+
+    <section class="panel" id="ingest-panel">
       <h2>Ingest a Navidrome library</h2>
       <div class="controls">
         <div class="field" style="flex: 1">
-          <label for="operator-token">Operator token</label>
-          <input type="password" id="operator-token" autocomplete="off" />
+          <label>Admin ingestion</label>
+          <span class="meta">Available to the configured administrator account</span>
         </div>
         <div class="field">
           <label>&nbsp;</label>
@@ -247,10 +265,9 @@
     <div id="results">
       <div class="empty">Enter a query to search lyrics by meaning</div>
     </div>
+    </div>
 
     <script>
-      const API = "http://localhost:8000";
-      let operatorToken = "";
       let collectionLoadVersion = 0;
 
       const escapeHtml = (value) =>
@@ -272,26 +289,27 @@
         element.classList.toggle("error", isError);
       }
 
-      async function apiRequest(path, options = {}, protectedRequest = false) {
+      async function apiRequest(path, options = {}) {
         const headers = new Headers(options.headers || {});
-        if (protectedRequest && operatorToken) {
-          headers.set("Authorization", `Bearer ${operatorToken}`);
-        }
         if (options.body && !headers.has("Content-Type")) {
           headers.set("Content-Type", "application/json");
         }
 
         let response;
         try {
-          response = await fetch(`${API}${path}`, { ...options, headers });
+          response = await fetch(path, { ...options, headers, credentials: "same-origin" });
         } catch (_error) {
-          const error = new Error(`Cannot reach ${API}. Start the local API in debug mode and check its port.`);
+          const error = new Error("Cannot reach the Resonance API. Start the local API and check its port.");
           error.networkFailure = true;
           throw error;
         }
 
         const data = await response.json().catch(() => null);
         if (!response.ok) {
+          if (response.status === 401 && path !== "/api/auth/login" && path !== "/api/auth/me") {
+            showSession(null);
+            setStatus("login-status", "Your session expired. Sign in again.", true);
+          }
           const detail = Array.isArray(data?.detail)
             ? data.detail.map((item) => `${item.loc?.at(-1) || "request"}: ${item.msg}`).join("; ")
             : data?.detail;
@@ -302,6 +320,47 @@
         return data;
       }
 
+      async function login() {
+        const button = document.getElementById("login-btn");
+        button.disabled = true;
+        setStatus("login-status", "Signing in...");
+        try {
+          const result = await apiRequest("/api/auth/login", {
+            method: "POST",
+            body: JSON.stringify({
+              username: document.getElementById("username").value,
+              password: document.getElementById("password").value,
+            }),
+          });
+          document.getElementById("password").value = "";
+          showSession(result);
+          setStatus("login-status", "Signed in successfully.");
+          if (result.is_admin) await loadLibraries();
+          else await loadCollections();
+        } catch (error) {
+          setStatus("login-status", error.message, true);
+        } finally {
+          button.disabled = false;
+        }
+      }
+
+      function showSession(user) {
+        document.getElementById("login-panel").hidden = Boolean(user);
+        document.getElementById("app-panels").hidden = !user;
+        document.getElementById("ingest-panel").hidden = !user?.is_admin;
+        document.getElementById("session-label").textContent = user
+          ? `Signed in as ${user.username}${user.is_admin ? " · administrator" : ""}`
+          : "";
+      }
+
+      async function logout() {
+        try { await apiRequest("/api/auth/logout", { method: "POST" }); } catch (_error) {}
+        showSession(null);
+        document.getElementById("library").innerHTML = "";
+        document.getElementById("collection").innerHTML = "";
+        document.getElementById("results").innerHTML = '<div class="empty">Sign in to search your library</div>';
+      }
+
       function selectedLibraryId() {
         return document.getElementById("library").value;
       }
@@ -310,19 +369,13 @@
         const button = document.getElementById("load-libraries-btn");
         const ingestButton = document.getElementById("ingest-btn");
         const selector = document.getElementById("library");
-        operatorToken = document.getElementById("operator-token").value.trim();
-        if (!operatorToken) {
-          setStatus("ingest-status", "Enter the operator token to load Navidrome libraries.", true);
-          return;
-        }
-
         button.disabled = true;
         button.textContent = "Loading...";
         selector.disabled = true;
         ingestButton.disabled = true;
         setStatus("ingest-status", "Loading libraries...");
         try {
-          const libraries = await apiRequest("/api/navidrome/libraries", {}, true);
+          const libraries = await apiRequest("/api/navidrome/libraries");
           selector.innerHTML = libraries
             .map((library) => `<option value="${escapeHtml(library.id)}">${escapeHtml(library.name || library.id)}</option>`)
             .join("");
@@ -377,14 +430,13 @@
       }
 
       async function doIngest() {
-        operatorToken = document.getElementById("operator-token").value.trim();
         const libraryId = selectedLibraryId();
         const collection = document.getElementById("collection-name").value.trim();
         const limitText = document.getElementById("max-tracks").value.trim();
         const button = document.getElementById("ingest-btn");
 
-        if (!operatorToken || !libraryId) {
-          setStatus("ingest-status", "Enter the operator token and load a library first.", true);
+        if (!libraryId) {
+          setStatus("ingest-status", "Load a library first.", true);
           return;
         }
 
@@ -412,7 +464,6 @@
           const result = await apiRequest(
             "/api/ingest",
             { method: "POST", body: JSON.stringify(body) },
-            true,
           );
           const completion = result.enumeration_complete
             ? "Library enumeration complete."
@@ -506,15 +557,17 @@
       document.getElementById("library").addEventListener("change", () => {
         loadCollections().catch((error) => setStatus("ingest-status", error.message, true));
       });
-      document.getElementById("operator-token").addEventListener("input", (event) => {
-        operatorToken = event.target.value.trim();
-      });
-
       document.getElementById("query").addEventListener("keydown", (e) => {
         if (e.key === "Enter") doSearch();
       });
 
-      loadCollections().catch((error) => setStatus("search-status", error.message, true));
+      apiRequest("/api/auth/me")
+        .then(async (user) => {
+          showSession(user);
+          if (user.is_admin) await loadLibraries();
+          else await loadCollections();
+        })
+        .catch(() => showSession(null));
     </script>
   </body>
 </html>
