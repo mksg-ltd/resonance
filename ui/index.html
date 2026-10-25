@@ -170,7 +170,19 @@
     </div>
 
     <script>
-      const API = "http://localhost:8000";
+      const API = "";
+      const escapeHtml = (value) =>
+        String(value ?? "").replace(
+          /[&<>"']/g,
+          (char) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[char],
+        );
 
       // Load collections on page load
       async function loadCollections() {
@@ -180,7 +192,10 @@
           const select = document.getElementById("collection");
           select.innerHTML = data
             .filter((c) => c.points_count > 1)
-            .map((c) => `<option value="${c.name}">${c.name} (${c.points_count})</option>`)
+            .map(
+              (c) =>
+                `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)} (${c.points_count})</option>`,
+            )
             .join("");
         } catch (e) {
           document.getElementById("results").innerHTML =
@@ -209,18 +224,20 @@
           });
           if (!res.ok) {
             const error = await res.json().catch(() => null);
-            throw new Error(error?.detail || 'Search failed (HTTP ' + res.status + ')');
+            throw new Error(
+              error?.detail || "Search failed (HTTP " + res.status + ")",
+            );
           }
           const data = await res.json();
 
           const filtered = data.results.filter((r) => r.score >= minScore);
 
           if (filtered.length === 0) {
-            resultsDiv.innerHTML = `<div class="meta">No results for "${query}" above ${minScore}</div>`;
+            resultsDiv.innerHTML = `<div class="meta">No results for "${escapeHtml(query)}" above ${minScore}</div>`;
             return;
           }
 
-          let html = `<div class="meta">${filtered.length} results for "${query}" in ${collection} (score >= ${minScore})</div>`;
+          let html = `<div class="meta">${filtered.length} results for "${escapeHtml(query)}" in ${escapeHtml(collection)} (score >= ${minScore})</div>`;
 
           for (const r of filtered) {
             const lyricsEscaped = r.lyrics
@@ -230,18 +247,18 @@
             html += `
               <div class="result">
                 <div class="result-header">
-                  <span><span class="song-title">${r.title}</span> — <span class="artist">${r.artist}</span></span>
+                  <span><span class="song-title">${escapeHtml(r.title)}</span> — <span class="artist">${escapeHtml(r.artist)}</span></span>
                   <span class="score">${r.score.toFixed(4)}</span>
                 </div>
-                <div class="section-info">${r.section} (part ${r.position + 1}/${r.total_sections})</div>
+                <div class="section-info">${escapeHtml(r.section)} (part ${r.position + 1}/${r.total_sections})</div>
                 <div class="lyrics">${lyricsEscaped}</div>
-                <div class="filename">${r.filename}</div>
+                <div class="filename">${escapeHtml(r.song_id || r.filename)}</div>
               </div>`;
           }
 
           resultsDiv.innerHTML = html;
         } catch (e) {
-          resultsDiv.innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+          resultsDiv.innerHTML = `<div class="empty">Error: ${escapeHtml(e.message)}</div>`;
         } finally {
           btn.disabled = false;
           btn.textContent = "Search";

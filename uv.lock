@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.14"
 
 [[package]]
@@ -610,6 +610,7 @@ dependencies = [
     { name = "mutagen" },
     { name = "openai" },
     { name = "pydantic-settings" },
+    { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "qdrant-client" },
     { name = "uvicorn", extra = ["standard"] },
@@ -631,6 +632,7 @@ requires-dist = [
     { name = "mutagen", specifier = ">=1.47.0" },
     { name = "openai", specifier = ">=2.29.0" },
     { name = "pydantic-settings", specifier = ">=2.9.0" },
+    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "qdrant-client", specifier = ">=1.17.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },

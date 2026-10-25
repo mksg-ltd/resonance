@@ -8,7 +8,7 @@ Two strategies, applied in priority order:
 
 import re
 
-from .models import LrcChunk, LrcLine, SongData
+from .models import LrcChunk, LrcLine, SongData, Track
 
 # Matches section tags like [Chorus], [Verse 1-Akon], [Bridge], [Outro]
 SECTION_TAG_RE = re.compile(
@@ -103,7 +103,7 @@ def chunk_by_gaps(
 
 
 def chunk_song_data(
-    song: SongData,
+    song: SongData | Track,
     gap_threshold_sec: float = 5.0,
     min_chunk_lines: int = 2,
 ) -> list[LrcChunk]:

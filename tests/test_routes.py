@@ -23,7 +23,13 @@ def _make_test_client(debug: bool = True) -> tuple[TestClient, MagicMock, MagicM
     mock_qdrant.get_collections.return_value = MagicMock(collections=[])
     # Collection metadata with config_name for search auto-detection
     meta_point = MagicMock()
-    meta_point.payload = {"_metadata": True, "config_name": "test-provider", "provider": "openai", "model": "text-embedding-3-small", "dimensions": 1536}
+    meta_point.payload = {
+        "_metadata": True,
+        "config_name": "test-provider",
+        "provider": "openai",
+        "model": "text-embedding-3-small",
+        "dimensions": 1536,
+    }
     mock_qdrant.retrieve.return_value = [meta_point]
     app.state.qdrant = mock_qdrant
 
@@ -156,116 +162,54 @@ class TestSearchRoute:
 
 
 class TestIngestRoute:
-    def test_ingest_incremental_skips_existing(self, tmp_path):
-        """Incremental ingest skips songs already in the collection."""
-        _, mock_qdrant, mock_embedder = _make_test_client()
+    def _native(self):
+        from qdrant_client import QdrantClient
+        from tests.test_indexing import FixtureSource, FixtureEmbedder
 
-        # Collection exists with one song already ingested
-        mock_collection = MagicMock()
-        mock_collection.name = "test_lyrics"
-        mock_qdrant.get_collections.return_value = MagicMock(collections=[mock_collection])
-        mock_qdrant.get_collection.return_value = MagicMock(points_count=5)
+        source, embedder = FixtureSource(), FixtureEmbedder()
+        settings = Settings(api_token="operator-token", navidrome=source.config, _env_file=None)
+        app = create_app(settings)
+        app.state.qdrant = QdrantClient(":memory:")
+        app.state.navidrome = source
+        return TestClient(app), app.state.qdrant, source, embedder
 
-        # Model matches
-        meta_point = MagicMock()
-        meta_point.payload = {"_metadata": True, "model": "text-embedding-3-small"}
-        mock_qdrant.retrieve.return_value = [meta_point]
+    def test_native_ingest_persists_ids_and_skips_unchanged(self):
+        client, qdrant, source, embedder = self._native()
+        payload = {"provider": "fixture", "library_id": "2", "collection": "native"}
+        headers = {"Authorization": "Bearer operator-token"}
+        with patch("resonance.embedders.create_embedder_for_name", return_value=embedder):
+            first = client.post("/api/ingest", json=payload, headers=headers)
+            assert first.status_code == 200
+            assert first.json()["tracks_processed"] == 2
+            second = client.post("/api/ingest", json=payload, headers=headers)
+            assert second.status_code == 200
+            assert second.json()["tracks_unchanged"] == 2
+            assert qdrant.get_collection("native").points_count == 5
+        qdrant.close()
 
-        # Existing audio_path in collection
-        existing_point = MagicMock()
-        existing_point.payload = {"audio_path": "01 - Test Artist - Test Song.flac"}
-        mock_qdrant.scroll.return_value = ([existing_point], None)
+    def test_native_ingest_mismatch_does_not_append(self):
+        client, qdrant, source, embedder = self._native()
+        payload = {"provider": "fixture", "library_id": "2", "collection": "native"}
+        headers = {"Authorization": "Bearer operator-token"}
+        with patch("resonance.embedders.create_embedder_for_name", return_value=embedder):
+            assert client.post("/api/ingest", json=payload, headers=headers).status_code == 200
+            count = qdrant.get_collection("native").points_count
+            embedder.profile["model"] = "different-model"
+            result = client.post("/api/ingest", json=payload, headers=headers)
+            assert result.status_code == 409
+            assert qdrant.get_collection("native").points_count == count
+        qdrant.close()
 
-        # Create the same file on disk — should be skipped
-        audio_file = tmp_path / "01 - Test Artist - Test Song.flac"
-        audio_file.write_bytes(b"\x00" * 64)
-        lrc_file = tmp_path / "01 - Test Artist - Test Song.lrc"
-        lrc_file.write_text("[00:00.00] Test line\n[00:05.00] Another line\n")
-
-        from resonance.routes.ingest import run_ingest
-
-        result = run_ingest(
-            qdrant=mock_qdrant,
-            embedder=mock_embedder,
-            settings=Settings(
-                debug=True,
-                qdrant={"url": "http://localhost:6333"},
-            ),
-            collection="test_lyrics",
-            force=False,
-            data_dir=tmp_path,
+    def test_native_ingest_is_protected_and_old_path_input_rejected(self):
+        client, qdrant, source, embedder = self._native()
+        payload = {"provider": "fixture", "library_id": "2"}
+        assert client.post("/api/ingest", json=payload).status_code == 401
+        result = client.post(
+            "/api/ingest", json={**payload, "data_dir": "/music"}, headers={"Authorization": "Bearer operator-token"}
         )
-
-        assert result.files_processed == 0
-        assert result.chunks_created == 0
-
-    def test_ingest_warns_on_model_mismatch(self):
-        _, mock_qdrant, mock_embedder = _make_test_client()
-
-        mock_collection = MagicMock()
-        mock_collection.name = "test_lyrics"
-        mock_qdrant.get_collections.return_value = MagicMock(collections=[mock_collection])
-        mock_qdrant.get_collection.return_value = MagicMock(points_count=100)
-
-        # Stored model differs from active embedder
-        meta_point = MagicMock()
-        meta_point.payload = {"_metadata": True, "model": "text-embedding-3-large"}
-        mock_qdrant.retrieve.return_value = [meta_point]
-
-        from resonance.routes.ingest import run_ingest
-
-        result = run_ingest(
-            qdrant=mock_qdrant,
-            embedder=mock_embedder,
-            settings=Settings(
-                debug=True,
-                qdrant={"url": "http://localhost:6333"},
-            ),
-            collection="test_lyrics",
-            force=False,
-            data_dir=Path("/dummy"),
-        )
-
-        assert result.model_mismatch is True
-        assert result.stored_model == "text-embedding-3-large"
-
-    def test_ingest_processes_audio_files(self, tmp_path):
-        """Test that audio files with sidecar LRC are ingested via LibraryScanner."""
-        _, mock_qdrant, mock_embedder = _make_test_client()
-        mock_qdrant.get_collections.return_value = MagicMock(collections=[])
-
-        lrc_content = "[00:00.00] Test line one\n[00:05.00] Test line two\n[00:10.00] Test line three\n[00:15.00] Test line four\n"
-        audio_file = tmp_path / "01 - Test Artist - Test Song.flac"
-        audio_file.write_bytes(b"\x00" * 64)
-        lrc_file = tmp_path / "01 - Test Artist - Test Song.lrc"
-        lrc_file.write_text(lrc_content)
-
-        mock_embedder.embed.return_value = [[0.1] * 1536]
-
-        from resonance.routes.ingest import run_ingest
-
-        result = run_ingest(
-            qdrant=mock_qdrant,
-            embedder=mock_embedder,
-            settings=Settings(
-                debug=True,
-                qdrant={"url": "http://localhost:6333"},
-            ),
-            collection="test_lyrics",
-            force=True,
-            data_dir=tmp_path,
-        )
-
-        assert result.files_processed == 1
-        assert result.chunks_created >= 1
-
-        # Verify new payload fields in upserted points
-        upsert_call = mock_qdrant.upsert.call_args_list[-1]
-        points = upsert_call.kwargs["points"]
-        payload = points[0].payload
-        assert "audio_path" in payload
-        assert "lyrics_source" in payload
-        assert payload["filename"].endswith(".flac")
+        assert result.status_code == 422
+        assert not qdrant.get_collections().collections
+        qdrant.close()
 
 
 class TestConfigRoute:
@@ -310,7 +254,12 @@ class TestCollectionsRoute:
 
         # Mock metadata point
         meta_point = MagicMock()
-        meta_point.payload = {"_metadata": True, "provider": "openai", "model": "text-embedding-3-small", "dimensions": 1536}
+        meta_point.payload = {
+            "_metadata": True,
+            "provider": "openai",
+            "model": "text-embedding-3-small",
+            "dimensions": 1536,
+        }
         mock_qdrant.retrieve.return_value = [meta_point]
 
         response = client.get("/api/collections")

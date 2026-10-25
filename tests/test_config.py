@@ -70,3 +70,14 @@ class TestProviderConfig:
         (tmp_path / "bad.yaml").write_text("type: pytorch\nmodel: something\n")
         with pytest.raises(ValueError, match="Unknown provider type"):
             load_provider_config("bad", config_dir=tmp_path)
+
+
+def test_navidrome_dotenv_preserves_quoted_and_dollar_credentials(tmp_path, monkeypatch):
+    from resonance.config import NavidromeConfig
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("NAVIDROME_USER_PASSWORD", raising=False)
+    (tmp_path / ".env").write_text('NAVIDROME_USER_PASSWORD="literal$dollar and spaces"\n')
+    settings = NavidromeConfig()
+    assert settings.user_password.get_secret_value() == "literal$dollar and spaces"
+    assert "literal" not in settings.model_dump_json()

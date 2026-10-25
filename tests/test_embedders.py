@@ -149,3 +149,30 @@ class TestCreateEmbedderForName:
         e1 = create_embedder_for_name("cached", config_dir=tmp_path)
         e2 = create_embedder_for_name("cached", config_dir=tmp_path)
         assert e1 is e2
+
+
+def test_effective_config_change_invalidates_cache(tmp_path):
+    config = tmp_path / "mutable.yaml"
+    config.write_text("type: ollama\nmodel: nomic-embed-text\n")
+    first = create_embedder_for_name("mutable", config_dir=tmp_path)
+    config.write_text("type: ollama\nmodel: mxbai-embed-large\n")
+    second = create_embedder_for_name("mutable", config_dir=tmp_path)
+    assert first is not second and second.dimensions == 1024
+
+
+def test_openai_response_indices_preserve_input_order():
+    from types import SimpleNamespace
+    embedder = OpenAIEmbedder(OpenAIProviderConfig(api_key="sk-test"))
+    embedder._client.embeddings.create = MagicMock(return_value=SimpleNamespace(data=[
+        SimpleNamespace(index=1, embedding=[0.0, 1.0]),
+        SimpleNamespace(index=0, embedding=[1.0, 0.0]),
+    ]))
+    assert embedder.embed(["first", "second"]) == [[1.0, 0.0], [0.0, 1.0]]
+    embedder.close()
+
+
+def test_explicit_openai_endpoint_takes_precedence_over_sdk_environment(monkeypatch):
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://environment.test/v1")
+    embedder = OpenAIEmbedder(OpenAIProviderConfig(base_url="https://configured.test/v1"))
+    assert embedder.profile["endpoint"] == str(embedder._client.base_url).rstrip("/") == "https://configured.test/v1"
+    embedder.close()

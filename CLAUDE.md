@@ -2,28 +2,31 @@
 
 ## Project Overview
 
-Semantic search engine for song lyrics. Users search by meaning/theme ("songs about letting go") instead of keywords. API-first — designed to be consumed by a Jellyfin plugin, Swagger UI, or any HTTP client.
+Semantic search engine for song lyrics. Users search by meaning/theme ("songs about letting go") instead of keywords. Shared Python application operations serve CLI first, FastAPI next, and possible future MCP/UI clients. Navidrome is the production library source.
 
-**Core pipeline:** LRC files → parse → chunk (by section tags or time gaps) → embed (OpenAI/Ollama) → store in Qdrant → semantic search via cosine similarity.
+**Core pipeline:** Navidrome metadata/synced lyrics → normalized Track → chunk → embed (TEI-compatible/OpenAI/Ollama) → Qdrant → semantic search using server song IDs.
 
 ## Stack
 
 - **API:** FastAPI + uvicorn
 - **Config:** YAML + pydantic-settings
 - **Vector DB:** Qdrant (Docker)
-- **Embeddings:** OpenAI (default), Ollama (local alternative)
+- **Embeddings:** TEI through its OpenAI-compatible API; explicit OpenAI/Ollama configurations also supported
 - **Package manager:** uv
 - **Build:** hatchling
 
 ## Architecture
 
-API-first design. All functionality exposed as FastAPI endpoints. Three clients share the same API:
+Transport-independent application operations live in `application/`. CLI and FastAPI
+are thin adapters; no CLI imports route-owned business logic. Navidrome supplies song
+identity, metadata, and structured lyrics, with no music filesystem mount.
 
-1. **Jellyfin plugin** (future) — renders UI inside Jellyfin, calls our API
-2. **Swagger UI** — enabled in debug mode, the dev interface
-3. **CLI tools** — `resonance-ingest`, `resonance-search` for command-line use
-
-Config is YAML-first. Most users configure via `config/config.yml` and never touch a web UI. Provider-specific settings (API keys, model names) live in `config/conf.d/{provider}.yaml`.
+Settings load from `.env`/environment using pydantic-settings. Provider YAML files
+load from `config/{name}.yaml` or `~/.config/resonance/`. Main settings are not YAML.
+Native collections bind server/account/library and effective embedding/index settings.
+Qdrant owns actual section-completion state. SQLite is only for native playlist-save
+operations, not track mapping. Full per-library refresh, UI/MCP, and seed/theme playlist
+generation remain future scope.
 
 ## Commands
 
@@ -44,40 +47,43 @@ Config is YAML-first. Most users configure via `config/config.yml` and never tou
 
 ## Conventions
 
-- No services layer — route handlers contain business logic directly
+- Shared application layer — source/index policy is independent of FastAPI/argparse
 - Package splits use `__init__.py` re-exports (e.g., `embedders/`, `routes/`)
 - Tests use FastAPI TestClient with mocked external APIs (OpenAI, Qdrant)
 - Domain models are dataclasses in `models.py`
 - Config loaded once at startup, stored in `app.state`
-- Music directory hardcoded to `/data/media/music/english` (until Jellyfin API integration)
+- Production discovery uses an explicit Navidrome library ID; legacy scanner/raw LRC/M3U tools remain independent
 
 ## Project Structure
 
 ```
 src/resonance/
-├── app.py            # FastAPI application factory
-├── config.py          # Pydantic settings + YAML loading
-├── models.py          # Domain models (LrcLine, LrcChunk, LrcLyric)
-├── parser.py          # LRC file parsing
-├── chunker.py         # Chunking strategies (tags, gaps)
-├── ingest.py          # Ingestion pipeline + CLI
-├── search.py          # Search logic + CLI
-├── embedders/         # Provider abstraction
-│   ├── base.py        # EmbeddingProvider protocol
-│   ├── openai.py      # OpenAI implementation
-│   └── ollama.py      # Ollama implementation
-└── routes/            # FastAPI route modules
-    ├── search.py
-    ├── ingest.py
-    ├── config.py
-    ├── collections.py
-    └── health.py
+├── application/       # Shared indexing, ingestion, search, library and save policy
+├── navidrome.py       # Form POST API, paging, metadata/lyrics, XML playlists
+├── state.py           # Transactional SQLite save-operation journal
+├── models.py          # Track, lyric primitives, server response DTOs
+├── config.py          # Settings/dotenv and named provider YAML
+├── embedders/         # OpenAI-compatible/TEI and Ollama clients
+├── routes/            # Thin HTTP adapters, native auth, legacy M3U
+├── ingest.py          # Native ingestion CLI
+├── search.py          # Semantic search CLI
+├── library.py         # Read-only native inspection CLI
+├── playlists.py       # Native save/status CLI
+├── chunker.py         # Tags/gaps/min-lines lyric chunking
+├── parser.py          # Raw LRC parsing (legacy tools)
+└── scanner.py         # Legacy filesystem tools only
 ```
 
 ## Gotchas
 
 - Env var for OpenAI key is `OPENAI_API_KEY` (normalized from legacy `OPEN_AI_KEY`)
 - Collection metadata in Qdrant stores provider/model/dimensions — collections are self-describing
-- Ingest recreates collection by default (deletes existing data). Use `force=false` to skip if data exists.
+- Native ingest never deletes/recreates a collection automatically. Identical partial writes can resume; changed indexed lyrics require a new collection until refresh is implemented. Native ingest HTTP requires an operator token.
 - `.venv` lives at project root (not in `src/`)
 - PRDs in `docs/prds/`, plans in `docs/plans/`
+
+- Navidrome 0.64.2 omits `public=false` in JSON; native saves verify explicit XML visibility.
+- Never parse `.env` through Make or print credentials/lyrics in default logs.
+- `docker-compose.dev.yml` was intentionally removed; dev commands use the sole Compose file.
+
+- Native create/status uses globally unique operation keys; never automatically retry unknown-ID creation. Keep the SQLite journal durable. Native HTTP endpoints require RESONANCE__API_TOKEN; CLI trusts the local operator.

@@ -14,6 +14,9 @@ class CollectionInfo(BaseModel):
     provider: str | None = None
     model: str | None = None
     dimensions: int | None = None
+    source_id: str | None = None
+    library_id: str | None = None
+    index_fingerprint: str | None = None
 
 
 @router.get("/collections", response_model=list[CollectionInfo])
@@ -31,6 +34,7 @@ def list_collections(request: Request) -> list[CollectionInfo]:
         provider = None
         model = None
         dimensions = None
+        binding = {}
         if points_count > 0:
             try:
                 points = qdrant.retrieve(collection_name=col.name, ids=[0])
@@ -39,6 +43,7 @@ def list_collections(request: Request) -> list[CollectionInfo]:
                     provider = payload.get("provider")
                     model = payload.get("model")
                     dimensions = payload.get("dimensions")
+                    binding = {key: payload.get(key) for key in ("source_id", "library_id", "index_fingerprint")}
             except Exception:  # noqa: BLE001
                 pass
 
@@ -49,6 +54,7 @@ def list_collections(request: Request) -> list[CollectionInfo]:
                 provider=provider,
                 model=model,
                 dimensions=dimensions,
+                **binding,
             )
         )
 

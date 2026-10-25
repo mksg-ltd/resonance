@@ -1,10 +1,6 @@
 .PHONY: help up down clean run prod prod-down test lint install build
 
-# Load .env if present
-ifneq (,$(wildcard .env))
-    include .env
-    export
-endif
+# Python settings and Docker Compose parse .env; Make must not reinterpret secrets.
 
 # Color output
 BLUE := \033[0;34m
@@ -15,19 +11,19 @@ help: ## Show this help message
 	@printf "$(GREEN)resonance Development Commands:$(RESET)\n"
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[0;34m%-15s\033[0m %s\n", $$1, $$2}'
 
-up: ## Start dev dependencies (Qdrant)
+up: ## Start dev dependencies (Qdrant + TEI)
 	@printf "$(BLUE)Starting dev services...$(RESET)\n"
-	docker compose -f docker-compose.dev.yml up -d
+	docker compose up -d qdrant tei
 	@printf "$(GREEN)Qdrant running at http://localhost:6333$(RESET)\n"
 
-down: ## Stop dev dependencies
+down: ## Stop dev dependencies without deleting state
 	@printf "$(BLUE)Stopping dev services...$(RESET)\n"
-	docker compose -f docker-compose.dev.yml down
+	docker compose stop qdrant tei
 	@printf "$(GREEN)Services stopped$(RESET)\n"
 
-clean: ## Stop services and remove volumes (fresh start)
+clean: ## Remove dev dependency containers, preserving stored data
 	@printf "$(BLUE)Cleaning Docker state...$(RESET)\n"
-	docker compose -f docker-compose.dev.yml down -v
+	docker compose rm -sf qdrant tei
 	@printf "$(GREEN)Clean state restored$(RESET)\n"
 
 run: up ## Start Qdrant + dev server (Swagger UI at /docs)

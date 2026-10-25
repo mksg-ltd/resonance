@@ -1,210 +1,179 @@
 # resonance
 
-Semantic search for your music library. Describe a mood, theme, or feeling — get matching songs back, ranked by lyric similarity.
+Search the meaning of lyrics in your Navidrome library. Resonance retrieves track
+metadata and synced lyrics through Navidrome APIs, chunks and embeds the lyrics,
+and stores searchable sections in Qdrant. No music bind mount is required.
 
-Built for self-hosters running Jellyfin. Works entirely on your own hardware with local models, or use OpenAI for higher quality embeddings.
+The shared Python application interface serves the CLI and FastAPI. The current
+backend work adds library-native ingestion/search and verified private playlist
+creation; automatic seed/theme generation, a Vue frontend, MCP, and scheduled
+library refresh are separate follow-ons.
 
-## How it works
+## Setup
 
-```
-Your music library (LRC files)
-  → Parse timestamped lyrics
-  → Chunk into song sections (verse, chorus, bridge)
-  → Generate vector embeddings (OpenAI or Ollama)
-  → Store in Qdrant vector database
-  → Search by meaning, not keywords
-```
-
-Ask for "songs about letting go and moving on" and get results ranked by semantic similarity — not keyword matching.
-
-## Quick start
-
-### Prerequisites
-
-- Docker and Docker Compose
-- An OpenAI API key (or a running Ollama instance for local embeddings)
-- LRC lyrics files for your music library
-
-### 1. Clone and configure
+Requires Python 3.14+, uv, Docker Compose, a reachable Navidrome account/library, and
+an explicitly configured embedding provider. TEI is the local deployment direction;
+the existing OpenAI-compatible and Ollama clients remain usable.
 
 ```bash
-git clone https://github.com/youruser/resonance.git
-cd resonance
-
-# Copy example configs
-cp config/config.yaml.example config/config.yml
-cp config/conf.d/openai.yaml.example config/conf.d/openai.yaml
-
-# Edit config/conf.d/openai.yaml and set your API key
+cp .env.example .env
+uv sync
 ```
 
-### 2. Start the services
+Edit `.env` with `NAVIDROME_BASE_URL`, `NAVIDROME_USER_ID` (the login username), and
+`NAVIDROME_USER_PASSWORD`. Use HTTPS. An explicitly trusted local HTTP deployment
+requires `NAVIDROME_ALLOW_HTTP=true`. Keep `NAVIDROME_SERVER_ID` stable; rotate it
+and build a new index if rebuilding the server changes song identities.
+
+Set a private `RESONANCE__API_TOKEN` to enable native HTTP operations. Local CLI
+execution is the trusted operator interface and does not require that token. Python
+and Compose parse `.env`; Make does not source or expand credentials as Make syntax.
+Do not commit `.env` or real credentials.
+
+Embedding profiles are named YAML files under `config/` or `~/.config/resonance/`.
+An OpenAI-compatible TEI profile looks like:
+
+```yaml
+type: openai
+base_url: http://localhost:8085/v1
+api_key: dummy
+model: krutrim-ai-labs/Vyakyarth
+dimensions: 768
+```
+
+Use the endpoint reachable from the process running Resonance. Within Compose,
+TEI is reachable as `http://tei/v1`; host-run clients use the published port 8085.
+Use the actual served model and dimensions. Configure a revision when known and
+create a new collection after changing model weights. Provider type describes the
+API transport; it is not proof of the model's identity. Explicitly configuring a
+hosted endpoint sends selected lyric sections/search text there; no cloud fallback
+is performed.
 
 ```bash
-docker compose up -d
+make up       # Qdrant + TEI dependencies
+make run      # dependencies + source API on :8000, Swagger at /docs
+# Or: make prod starts the complete Compose stack explicitly.
 ```
 
-This starts:
+Qdrant uses port 6333; TEI uses 8085. `make down` stops dev dependencies. `make clean`
+removes their containers while preserving data and playlist-operation state.
 
-- **Qdrant** — vector database on port 6333
-- **resonance** — API service on port 8000
-
-### 3. Ingest your lyrics
+## Inspect a Library
 
 ```bash
-curl -X POST http://localhost:8000/api/ingest -H "Content-Type: application/json" -d '{}'
+uv run resonance-library inspect
+uv run resonance-library libraries
+uv run resonance-library tracks --library 2 --limit 10
+uv run resonance-library lyrics --library 2 --song <song-id>
 ```
 
-### 4. Search
+Inspection has no indexing or playlist-write side effects. The explicit lyrics
+command returns lyric text for the selected song; default logs do not contain it.
+Synced lyric offsets are normalized; absent/unsynced-only lyrics are reported.
+
+## Ingest and Search
 
 ```bash
-curl -X POST http://localhost:8000/api/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "songs about heartbreak and rain"}'
+uv run resonance-ingest --provider vyakyarth --library 2 --collection home_english_vyakyarth --max-tracks 10
+uv run resonance-search --collection home_english_vyakyarth "songs about letting go"
 ```
 
-### 5. Swagger UI
+Omit `--max-tracks` only when deliberately indexing the full selected library. It
+is a run bound, not a claim that the entire library was enumerated. Provider config
+can be selected automatically from collection metadata during search; `--provider`
+is an optional compatible override. Exact `--artist` filtering remains available.
 
-Enable debug mode in `config/config.yml`:
+Each native collection binds one server/account/library and one effective embedding
+profile, with model/dimensions/chunking/schema metadata. Incompatible scopes/configs
+are refused before appending vectors. Existing file-based collections stay readable;
+choose a new native collection for the migration. No collection is deleted/recreated
+automatically, and `--data-dir`/`--force` are not native ingestion inputs.
 
-```yaml
-server:
-  debug: true
-```
+Song IDs are retained in every section and search hit. Distinct recordings with the
+same artist/title remain distinct. Section IDs and lyric/index fingerprints are
+stable; incomplete section groups are not searchable. Identical retries can finish
+partial writes without duplicates. Changed indexed lyrics require a new collection
+until the separate refresh feature implements replacement/cleanup. Missing lyrics
+remain eligible for later ingestion. There is no automatic pruning or scheduler.
 
-Then visit `http://localhost:8000/docs` for the interactive API explorer.
+## Save a Private Playlist
 
-## Configuration
-
-### Main config (`config/config.yml`)
-
-```yaml
-embedding:
-  provider: openai # openai | ollama
-
-qdrant:
-  url: http://localhost:6333
-  collection: lyrics
-
-chunking:
-  gap_threshold_sec: 10.0
-  min_chunk_lines: 2
-
-server:
-  host: 0.0.0.0
-  port: 8000
-  debug: false
-```
-
-### Provider configs (`config/conf.d/`)
-
-Each provider gets its own file. Only the active provider's file is loaded.
-
-**OpenAI** (`config/conf.d/openai.yaml`):
-
-```yaml
-api_key: ${OPENAI_API_KEY} # reads from environment variable
-model: text-embedding-3-small # or text-embedding-3-large for higher quality
-```
-
-**Ollama** (`config/conf.d/ollama.yaml`):
-
-```yaml
-base_url: http://localhost:11434
-model: nomic-embed-text # or mxbai-embed-large
-```
-
-### Environment variable overrides
-
-Any config value can be overridden with environment variables:
+Use an explicit approved selection, repeating `--song` in playback order:
 
 ```bash
-RESONANCE__QDRANT__URL=http://qdrant:6333
-RESONANCE__SERVER__DEBUG=true
-RESONANCE__EMBEDDING__PROVIDER=ollama
+uv run resonance-playlist create --operation-id my-save-001 --library 2 --name "Letting Go" --song <id-one> --song <id-two>
+uv run resonance-playlist status --operation-id my-save-001 --library 2
 ```
 
-## Fully self-hosted setup
+Keep the same operation key and exact input on retries. Keys are unique across the
+journal, including account/server/library changes. Duplicate visible names require
+`--allow-duplicate-name`. Selections contain 1–100 distinct current library song IDs.
+No model call or search regeneration occurs during save.
 
-No cloud dependencies required. Use Ollama for local embeddings:
+Private creation is enabled only for the validated Navidrome 0.64.2 release/build
+with form POST support. Resonance checks library membership/access before creating,
+then verifies the returned exact ID, owner, name, explicit XML privacy, count and
+order. Upgrading Navidrome requires validating and updating this gate first.
 
-```yaml
-# config/config.yml
-embedding:
-  provider: ollama
+The SQLite journal records save requests/outcomes, not lyrics or file mappings.
+Its default path is `data/playlist-operations.sqlite3`; override with
+`RESONANCE__JOURNAL_PATH`. Compose uses a durable `playlist_state` volume at
+`/app/state`, writable by appuser. Preserve/back up this journal. Losing it also
+loses duplicate-save protection; routine `make clean` preserves it.
+
+`verified` means exact server readback matched. A known-ID `unresolved` operation
+can reconcile via status. An unknown-ID `submitting`/`unresolved` outcome must be
+inspected manually; retrying the same key never blindly creates again. Do not use
+a fresh key to retry an uncertain save. CLI exit codes are 0 for verified, 1 for
+failed/invalid requests, and 2 for incomplete/unresolved operations. HTTP returns
+the operation state; a 200 response alone does not mean the playlist is verified.
+General playlist update/delete and automatic uncertain-outcome repair are deferred.
+
+## HTTP API
+
+| Method     | Path                                                            | Purpose                                             |
+| ---------- | --------------------------------------------------------------- | --------------------------------------------------- |
+| GET        | `/health`                                                       | Qdrant connectivity                                 |
+| GET        | `/api/config`                                                   | Public configuration with secrets excluded/redacted |
+| GET/DELETE | `/api/collections[/<name>]`                                     | List bindings / explicitly delete an index          |
+| POST       | `/api/search`                                                   | Query a selected native or legacy collection        |
+| POST       | `/api/ingest`                                                   | Protected native library ingestion                  |
+| GET        | `/api/navidrome/connection`, `/libraries`, `/tracks`, `/lyrics` | Protected source inspection                         |
+| POST       | `/api/navidrome/playlists`                                      | Protected native private save                       |
+| GET        | `/api/navidrome/operations/<operation_id>?library_id=2`         | Protected save status/reconciliation                |
+| POST       | `/api/playlists`                                                | Legacy explicit-path M3U file creation              |
+
+All `/api/navidrome/...` paths and native ingestion require `Authorization: Bearer <operator-token>` and a JSON body:
+
+```json
+{
+  "provider": "vyakyarth",
+  "library_id": "2",
+  "collection": "home_english_vyakyarth",
+  "max_tracks": 10
+}
 ```
 
-```yaml
-# config/conf.d/ollama.yaml
-base_url: http://ollama:11434
-model: nomic-embed-text
-```
-
-Add Ollama to your `docker-compose.yml`:
-
-```yaml
-services:
-  ollama:
-    image: ollama/ollama:latest
-    volumes:
-      - ollama_data:/root/.ollama
-    # Pull the model: docker exec ollama ollama pull nomic-embed-text
-```
-
-Stack: Jellyfin + Qdrant + Ollama + resonance. Zero cloud dependencies.
-
-## API endpoints
-
-| Method   | Path                      | Description                           |
-| -------- | ------------------------- | ------------------------------------- |
-| `POST`   | `/api/search`             | Semantic lyric search                 |
-| `POST`   | `/api/ingest`             | Trigger lyrics ingestion              |
-| `GET`    | `/api/config`             | Current config (secrets redacted)     |
-| `GET`    | `/api/collections`        | List Qdrant collections with metadata |
-| `DELETE` | `/api/collections/{name}` | Drop a collection                     |
-| `GET`    | `/health`                 | Service health check                  |
-
-## Docker Compose
-
-The default `docker-compose.yml` runs resonance alongside Qdrant. Mount your music library and config:
-
-```yaml
-services:
-  resonance:
-    build: .
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./config:/app/config:ro
-      - /path/to/your/music:/data/media/music/english:ro
-    environment:
-      - RESONANCE__QDRANT__URL=http://qdrant:6333
-    depends_on:
-      - qdrant
-```
-
-## CLI tools
-
-For local development or scripting:
-
-```bash
-# Search
-uv run resonance-search "songs about hope" --artist "Coldplay" --limit 10
-
-# Ingest
-uv run resonance-ingest --gap 8.0 --data-dir ./my-lyrics/
-```
+Unknown fields, including obsolete mounted-directory inputs, are rejected. The
+static debug search page remains at `/ui`; the full frontend is separate work.
+Legacy M3U creation still operates on explicitly submitted paths/output directories;
+it is not part of native Navidrome playback or a reason to restore a music mount.
+Raw LRC inspection remains available through `resonance-chunks file.lrc`.
 
 ## Development
 
 ```bash
-make install    # Install deps + pre-commit hooks
-make run        # Start dev server with auto-reload
-make test       # Run tests
-make lint       # Check code style
-make build      # Build Docker image
+make test
+make lint
+uv run ty check src/
+make build
 ```
 
-## License
+Tests use synthetic lyrics, real local Qdrant/SQLite for persistence contracts, and
+mocked external APIs. Live probes are bounded and must not run a whole-library
+embedding migration implicitly. See [PRD-09](docs/prds/09-navidrome-semantic-playlists.md)
+and the [live validation record](docs/plans/2026-10-25-navidrome-validation.md).
 
-MIT
+Native save accepts `operation_id`, `library_id`, `name`, ordered `song_ids`, and
+optional `allow_duplicate_name`. These map directly to the CLI selection above.
+The inspection subpaths shown in the table share the `/api/navidrome` prefix.

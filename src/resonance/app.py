@@ -6,16 +6,20 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from qdrant_client import QdrantClient
 
 from resonance.config import Settings
+from resonance.embedders import close_embedders
+from resonance.errors import ApplicationError
 from resonance.routes.collections import router as collections_router
 from resonance.routes.config import router as config_router
 from resonance.routes.health import router as health_router
 from resonance.routes.ingest import router as ingest_router
+from resonance.routes.navidrome import router as navidrome_router
 from resonance.routes.playlists import router as playlists_router
 from resonance.routes.search import router as search_router
 
@@ -32,8 +36,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     )
     app.state.qdrant = qdrant
 
-    yield
-    qdrant.close()
+    try:
+        yield
+    finally:
+        qdrant.close()
+        close_embedders()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -54,6 +61,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
 
+    @app.exception_handler(ApplicationError)
+    async def application_error(_request: Request, error: ApplicationError) -> JSONResponse:
+        return JSONResponse(status_code=error.status, content={"detail": str(error), "code": error.code})
+
     # CORS — allow static UI to call the API
     if settings.debug:
         app.add_middleware(
@@ -70,6 +81,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(config_router)
     app.include_router(collections_router)
     app.include_router(playlists_router)
+    app.include_router(navidrome_router)
 
     # Serve static UI files (if ui/ directory exists)
     ui_dir = Path(__file__).resolve().parent.parent.parent / "ui"

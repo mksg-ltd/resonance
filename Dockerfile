@@ -9,12 +9,12 @@ WORKDIR /app
 
 # Install dependencies first (cached layer)
 COPY pyproject.toml uv.lock ./
-RUN uv sync --no-dev --frozen || uv sync --no-dev
+RUN uv sync --no-dev --frozen --no-install-project
 
 # Copy source
 COPY src/ src/
 COPY README.md ./
-RUN uv sync --no-dev --frozen || uv sync --no-dev
+RUN uv sync --no-dev --frozen
 
 # --- Runtime stage ---
 FROM python:3.14-slim
@@ -29,6 +29,9 @@ COPY --from=builder /app/.venv /app/.venv
 # Copy source
 COPY --from=builder /app/src /app/src
 COPY --from=builder /app/pyproject.toml /app/
+
+RUN mkdir -p /app/state && chown appuser:appuser /app/state
+ENV RESONANCE__JOURNAL_PATH=/app/state/playlist-operations.sqlite3
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1

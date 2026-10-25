@@ -1,10 +1,13 @@
 """Configuration management — env vars via pydantic-settings, provider configs from YAML."""
 
 import os
+import re
 from pathlib import Path
+from string import Template
 
 import yaml
-from pydantic import BaseModel, SecretStr
+from dotenv import dotenv_values
+from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,7 +35,13 @@ class OpenAIProviderConfig(BaseModel):
     api_key: SecretStr = SecretStr("dummy")  # not needed for local servers like TEI
     model: str = "text-embedding-3-small"
     base_url: str | None = None  # e.g., "http://localhost:8080/v1" for TEI
-    dimensions: int | None = None  # override auto-detected dimensions
+    dimensions: int | None = Field(default=None, gt=0)  # expected server output dimensions
+    revision: str | None = None
+
+    @property
+    def effective_base_url(self) -> str:
+        """Resolve SDK environment behavior once for transport, profile and cache."""
+        return (self.base_url or os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
 
 
 class OllamaProviderConfig(BaseModel):
@@ -40,6 +49,24 @@ class OllamaProviderConfig(BaseModel):
 
     base_url: str = "http://localhost:11434"
     model: str = "nomic-embed-text"
+    dimensions: int | None = Field(default=None, gt=0)
+    revision: str | None = None
+
+
+class NavidromeConfig(BaseSettings):
+    """One operator-configured Navidrome account, loaded without shell evaluation."""
+
+    model_config = SettingsConfigDict(env_prefix="NAVIDROME_", env_file=".env", extra="ignore")
+
+    base_url: str | None = None
+    user_id: str | None = None  # Subsonic login username, not the internal account ID
+    user_password: SecretStr | None = None
+    server_id: str = "home"
+    allow_http: bool = False
+    timeout: float = Field(default=20, gt=0, le=300)
+    page_size: int = Field(default=500, ge=1, le=500)
+    max_pages: int = Field(default=200, ge=1)
+    lyrics_language: str | None = None
 
 
 class Settings(BaseSettings):
@@ -56,12 +83,17 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="RESONANCE__",
         env_nested_delimiter="__",
+        env_file=".env",
+        extra="ignore",
     )
 
     debug: bool = False  # enables CORS, reload
     serve_docs: bool = False  # enables Swagger UI at /docs
     qdrant: QdrantConfig = QdrantConfig()
     chunking: ChunkingConfig = ChunkingConfig()
+    navidrome: NavidromeConfig = Field(default_factory=NavidromeConfig)
+    api_token: SecretStr | None = None
+    journal_path: Path = Path("data/playlist-operations.sqlite3")
 
 
 def _expand_env_vars(data: dict) -> dict:
@@ -71,7 +103,8 @@ def _expand_env_vars(data: dict) -> dict:
         if isinstance(value, dict):
             result[key] = _expand_env_vars(value)
         elif isinstance(value, str):
-            result[key] = os.path.expandvars(value)
+            variables = {key: value for key, value in dotenv_values(".env").items() if value is not None}
+            result[key] = Template(value).safe_substitute({**variables, **os.environ})
         else:
             result[key] = value
     return result
@@ -99,6 +132,9 @@ def load_provider_config(
     Returns (provider_type, config) tuple.
     Raises ValueError if config file not found or type is unknown.
     """
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name):
+        msg = "Provider configuration name must be a filename stem"
+        raise ValueError(msg)
     search_dirs = []
     if config_dir:
         search_dirs.append(config_dir)

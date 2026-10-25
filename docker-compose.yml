@@ -8,13 +8,15 @@ services:
       - "6334:6334"
   resonance:
     build: .
+    env_file: .env
     ports:
       - "8000:8000"
     volumes:
       - ./config:/app/config:ro
       - ./ui:/app/ui:ro
-      - /var/home/mk/mnt/homelab-data/media/music/english:/app/music:ro
+      - playlist_state:/app/state
     environment:
+      - RESONANCE__JOURNAL_PATH=/app/state/playlist-operations.sqlite3
       - RESONANCE__DEBUG=true
       - RESONANCE__SERVE_DOCS=true
       - RESONANCE__QDRANT__URL=http://qdrant:6333
@@ -44,3 +46,6 @@ services:
     environment:
       - MODEL_ID=krutrim-ai-labs/Vyakyarth
       - MAX_BATCH_TOKENS=16384
+
+volumes:
+  playlist_state:

@@ -13,7 +13,7 @@ def parse_lrc_lines(filepath: Path) -> list[LrcLine]:
     """Parse an LRC file into timestamped lines."""
     try:
         text = filepath.read_text(encoding="utf-8")
-    except (UnicodeDecodeError, OSError):
+    except UnicodeDecodeError, OSError:
         return []
 
     lines = []
