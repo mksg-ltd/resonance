@@ -27,8 +27,11 @@ values come from environment settings. There is no user-maintained provider conf
 directory.
 Native collections bind server/account/library and effective embedding/index settings.
 Qdrant owns actual section-completion state. SQLite is only for native playlist-save
-operations, not track mapping. Full per-library refresh, UI/MCP, and seed/theme playlist
-generation remain future scope.
+operations, not track mapping. The current HTML is an operator PoC. Treat ingestion,
+library selection, and embedding configuration as admin operations; semantic search
+and private playlist creation are user-facing operations intended for future MCP
+tools. A playback client/tool handles playback. Multi-user auth and identity mapping,
+full per-library refresh, MCP, and seed/theme playlist generation remain future scope.
 
 ## Commands
 

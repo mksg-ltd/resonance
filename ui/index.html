@@ -128,10 +128,88 @@
         text-align: center;
         padding: 40px;
       }
+      .panel {
+        background: #24283b;
+        border: 1px solid #3b4261;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 18px;
+      }
+      .panel h2 {
+        color: #7aa2f7;
+        font-size: 1em;
+        margin-bottom: 10px;
+      }
+      .hint {
+        color: #565f89;
+        font-size: 0.8em;
+        line-height: 1.5;
+        margin: 8px 0;
+      }
+      .status {
+        min-height: 1.4em;
+        color: #9ece6a;
+        font-size: 0.85em;
+        margin-top: 8px;
+      }
+      .status.error {
+        color: #f7768e;
+      }
+      .controls input[type="password"] {
+        min-width: 260px;
+      }
+      @media (max-width: 600px) {
+        .controls .field {
+          width: 100%;
+        }
+        .controls input,
+        .controls select,
+        .controls button {
+          width: 100%;
+        }
+      }
     </style>
   </head>
   <body>
     <h1>resonance</h1>
+
+    <section class="panel">
+      <h2>Ingest a Navidrome library</h2>
+      <div class="controls">
+        <div class="field" style="flex: 1">
+          <label for="operator-token">Operator token</label>
+          <input type="password" id="operator-token" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button id="load-libraries-btn" onclick="loadLibraries()">Load libraries</button>
+        </div>
+        <div class="field">
+          <label for="library">Library</label>
+          <select id="library" disabled></select>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="field" style="flex: 1">
+          <label for="collection-name">Collection name (optional)</label>
+          <input type="text" id="collection-name" maxlength="255" placeholder="Leave blank for generated name" />
+        </div>
+        <div class="field">
+          <label for="max-tracks">Track limit</label>
+          <input type="number" id="max-tracks" value="10" min="1" step="1" style="width: 110px" />
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button id="ingest-btn" onclick="doIngest()" disabled>Ingest</button>
+        </div>
+      </div>
+      <p class="hint">
+        Re-running adds new eligible tracks and skips unchanged ones. Changed lyrics and removed tracks are not
+        reconciled yet; earlier tracks from a run may already be indexed if it stops at changed lyrics. Clearing
+        the limit runs the whole library synchronously without progress updates.
+      </p>
+      <div id="ingest-status" class="status" role="status"></div>
+    </section>
 
     <div class="controls">
       <div class="field" style="flex: 1">
@@ -165,12 +243,16 @@
       </div>
     </div>
 
+    <div id="search-status" class="status" role="status"></div>
     <div id="results">
       <div class="empty">Enter a query to search lyrics by meaning</div>
     </div>
 
     <script>
-      const API = "";
+      const API = "http://localhost:8000";
+      let operatorToken = "";
+      let collectionLoadVersion = 0;
+
       const escapeHtml = (value) =>
         String(value ?? "").replace(
           /[&<>"']/g,
@@ -184,22 +266,186 @@
             })[char],
         );
 
-      // Load collections on page load
-      async function loadCollections() {
+      function setStatus(id, message, isError = false) {
+        const element = document.getElementById(id);
+        element.textContent = message;
+        element.classList.toggle("error", isError);
+      }
+
+      async function apiRequest(path, options = {}, protectedRequest = false) {
+        const headers = new Headers(options.headers || {});
+        if (protectedRequest && operatorToken) {
+          headers.set("Authorization", `Bearer ${operatorToken}`);
+        }
+        if (options.body && !headers.has("Content-Type")) {
+          headers.set("Content-Type", "application/json");
+        }
+
+        let response;
         try {
-          const res = await fetch(`${API}/api/collections`);
-          const data = await res.json();
-          const select = document.getElementById("collection");
-          select.innerHTML = data
-            .filter((c) => c.points_count > 1)
-            .map(
-              (c) =>
-                `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)} (${c.points_count})</option>`,
-            )
+          response = await fetch(`${API}${path}`, { ...options, headers });
+        } catch (_error) {
+          const error = new Error(`Cannot reach ${API}. Start the local API in debug mode and check its port.`);
+          error.networkFailure = true;
+          throw error;
+        }
+
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+          const detail = Array.isArray(data?.detail)
+            ? data.detail.map((item) => `${item.loc?.at(-1) || "request"}: ${item.msg}`).join("; ")
+            : data?.detail;
+          const error = new Error(detail || `Request failed (HTTP ${response.status})`);
+          error.code = data?.code;
+          throw error;
+        }
+        return data;
+      }
+
+      function selectedLibraryId() {
+        return document.getElementById("library").value;
+      }
+
+      async function loadLibraries() {
+        const button = document.getElementById("load-libraries-btn");
+        const ingestButton = document.getElementById("ingest-btn");
+        const selector = document.getElementById("library");
+        operatorToken = document.getElementById("operator-token").value.trim();
+        if (!operatorToken) {
+          setStatus("ingest-status", "Enter the operator token to load Navidrome libraries.", true);
+          return;
+        }
+
+        button.disabled = true;
+        button.textContent = "Loading...";
+        selector.disabled = true;
+        ingestButton.disabled = true;
+        setStatus("ingest-status", "Loading libraries...");
+        try {
+          const libraries = await apiRequest("/api/navidrome/libraries", {}, true);
+          selector.innerHTML = libraries
+            .map((library) => `<option value="${escapeHtml(library.id)}">${escapeHtml(library.name || library.id)}</option>`)
             .join("");
-        } catch (e) {
-          document.getElementById("results").innerHTML =
-            '<div class="empty">Cannot connect to API at ' + API + "</div>";
+          if (libraries.length === 0) {
+            setStatus("ingest-status", "No Navidrome libraries are available for this account.", true);
+          } else {
+            setStatus("ingest-status", `Loaded ${libraries.length} Navidrome library/libraries.`);
+            await loadCollections();
+          }
+        } catch (error) {
+          setStatus("ingest-status", error.message, true);
+        } finally {
+          button.disabled = false;
+          button.textContent = "Load libraries";
+          selector.disabled = selector.options.length === 0;
+          ingestButton.disabled = selector.options.length === 0;
+        }
+      }
+
+      async function loadCollections(preferredCollection = "") {
+        const selector = document.getElementById("collection");
+        const libraryId = selectedLibraryId();
+        const requestVersion = ++collectionLoadVersion;
+        const previouslySelected = preferredCollection || selector.value;
+        const collections = await apiRequest("/api/collections");
+        if (requestVersion !== collectionLoadVersion || libraryId !== selectedLibraryId()) {
+          return null;
+        }
+        const available = collections.filter(
+          (collection) => collection.library_id && (!libraryId || collection.library_id === libraryId),
+        );
+
+        if (preferredCollection && !available.some((collection) => collection.name === preferredCollection)) {
+          available.push({ name: preferredCollection, points_count: 0, library_id: libraryId });
+        }
+
+        selector.innerHTML = available
+          .map((collection) => {
+            const metadataOnly = collection.points_count === 1;
+            const detail = metadataOnly ? "no searchable tracks" : `${collection.points_count} points`;
+            return `<option value="${escapeHtml(collection.name)}">${escapeHtml(collection.name)} (${detail})</option>`;
+          })
+          .join("");
+
+        if (available.some((collection) => collection.name === previouslySelected)) {
+          selector.value = previouslySelected;
+        }
+        if (available.length === 0) {
+          selector.innerHTML = '<option value="">No native collections for this library</option>';
+        }
+        return available.find((collection) => collection.name === selector.value) || null;
+      }
+
+      async function doIngest() {
+        operatorToken = document.getElementById("operator-token").value.trim();
+        const libraryId = selectedLibraryId();
+        const collection = document.getElementById("collection-name").value.trim();
+        const limitText = document.getElementById("max-tracks").value.trim();
+        const button = document.getElementById("ingest-btn");
+
+        if (!operatorToken || !libraryId) {
+          setStatus("ingest-status", "Enter the operator token and load a library first.", true);
+          return;
+        }
+
+        const body = { library_id: libraryId };
+        if (collection) body.collection = collection;
+        if (limitText) {
+          const maxTracks = Number(limitText);
+          if (!Number.isInteger(maxTracks) || maxTracks < 1) {
+            setStatus("ingest-status", "Track limit must be a positive whole number or blank.", true);
+            return;
+          }
+          body.max_tracks = maxTracks;
+        } else if (!window.confirm("This will ingest the full library. The request is synchronous and has no progress display. Continue?")) {
+          return;
+        }
+
+        button.disabled = true;
+        button.textContent = "Ingesting...";
+        const loadLibrariesButton = document.getElementById("load-libraries-btn");
+        const librarySelector = document.getElementById("library");
+        loadLibrariesButton.disabled = true;
+        librarySelector.disabled = true;
+        setStatus("ingest-status", "Ingestion is running. A full-library run can take a while...");
+        try {
+          const result = await apiRequest(
+            "/api/ingest",
+            { method: "POST", body: JSON.stringify(body) },
+            true,
+          );
+          const completion = result.enumeration_complete
+            ? "Library enumeration complete."
+            : "Track limit reached; enumeration incomplete.";
+          const summary = `Collection ${result.collection}: ${result.tracks_seen} tracks seen, ${result.tracks_processed} processed, ${result.tracks_unchanged} unchanged, ${result.sections_written} sections written, ${result.skipped} skipped (${result.missing_lyrics} missing lyrics, ${result.unsynced_lyrics} unsynced). ${completion}`;
+          setStatus(
+            "ingest-status",
+            summary,
+          );
+          let collectionInfo = null;
+          try {
+            collectionInfo = await loadCollections(result.collection);
+          } catch (refreshError) {
+            setStatus("ingest-status", `${summary} The ingestion completed, but collection list refresh failed: ${refreshError.message}`, true);
+          }
+          if (collectionInfo?.points_count === 1) {
+            setStatus("search-status", "No searchable lyric tracks have been indexed in this collection yet.");
+          } else if (collectionInfo) {
+            setStatus("search-status", "");
+          }
+        } catch (error) {
+          let detail = error.message;
+          if (error.networkFailure) {
+            detail += " If the browser lost the response during ingestion, the request may have completed; retrying the same collection is safe for unchanged or identical partial tracks.";
+          } else if (error.code === "refresh_required") {
+            detail += " Earlier tracks from this run may already be indexed; unchanged tracks are skipped on retry.";
+          }
+          setStatus("ingest-status", detail, true);
+        } finally {
+          button.disabled = false;
+          button.textContent = "Ingest";
+          loadLibrariesButton.disabled = false;
+          librarySelector.disabled = false;
         }
       }
 
@@ -210,40 +456,32 @@
         const btn = document.getElementById("search-btn");
         const resultsDiv = document.getElementById("results");
 
-        if (!query) return;
+        if (!query || !collection) {
+          setStatus("search-status", "Choose a collection and enter a search query.", true);
+          return;
+        }
 
         btn.disabled = true;
         btn.textContent = "Searching...";
         resultsDiv.innerHTML = '<div class="empty">Searching...</div>';
 
         try {
-          const res = await fetch(`${API}/api/search`, {
+          const data = await apiRequest("/api/search", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ query, collection, limit: 50 }),
           });
-          if (!res.ok) {
-            const error = await res.json().catch(() => null);
-            throw new Error(
-              error?.detail || "Search failed (HTTP " + res.status + ")",
-            );
-          }
-          const data = await res.json();
+          setStatus("search-status", "");
 
           const filtered = data.results.filter((r) => r.score >= minScore);
 
           if (filtered.length === 0) {
-            resultsDiv.innerHTML = `<div class="meta">No results for "${escapeHtml(query)}" above ${minScore}</div>`;
+            resultsDiv.innerHTML = `<div class="empty">No results for "${escapeHtml(query)}" above score ${escapeHtml(minScore)}. This collection may not have searchable lyric sections yet.</div>`;
             return;
           }
 
           let html = `<div class="meta">${filtered.length} results for "${escapeHtml(query)}" in ${escapeHtml(collection)} (score >= ${minScore})</div>`;
 
           for (const r of filtered) {
-            const lyricsEscaped = r.lyrics
-              .replace(/&/g, "&amp;")
-              .replace(/</g, "&lt;")
-              .replace(/>/g, "&gt;");
             html += `
               <div class="result">
                 <div class="result-header">
@@ -251,7 +489,7 @@
                   <span class="score">${r.score.toFixed(4)}</span>
                 </div>
                 <div class="section-info">${escapeHtml(r.section)} (part ${r.position + 1}/${r.total_sections})</div>
-                <div class="lyrics">${lyricsEscaped}</div>
+                <div class="lyrics">${escapeHtml(r.lyrics)}</div>
                 <div class="song-id">${escapeHtml(r.song_id)}</div>
               </div>`;
           }
@@ -265,12 +503,18 @@
         }
       }
 
-      // Search on Enter key
+      document.getElementById("library").addEventListener("change", () => {
+        loadCollections().catch((error) => setStatus("ingest-status", error.message, true));
+      });
+      document.getElementById("operator-token").addEventListener("input", (event) => {
+        operatorToken = event.target.value.trim();
+      });
+
       document.getElementById("query").addEventListener("keydown", (e) => {
         if (e.key === "Enter") doSearch();
       });
 
-      loadCollections();
+      loadCollections().catch((error) => setStatus("search-status", error.message, true));
     </script>
   </body>
 </html>
