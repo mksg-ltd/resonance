@@ -85,10 +85,7 @@ def ingest(qdrant, source, embedder, **kwargs):
     )
 
 
-def test_mount_free_ingestion_identity_search_and_unchanged_retry(monkeypatch):
-    from resonance.scanner import LibraryScanner
-
-    monkeypatch.setattr(LibraryScanner, "scan", lambda *_: pytest.fail("Native ingestion must not scan music files"))
+def test_navidrome_native_ingestion_identity_search_and_unchanged_retry():
     with closing(QdrantClient(":memory:")) as qdrant:
         source, embedder = FixtureSource(), FixtureEmbedder()
         result = ingest(qdrant, source, embedder)
@@ -197,10 +194,12 @@ def test_interrupted_batch_is_hidden_and_retry_reuses_ids(monkeypatch):
     with closing(QdrantClient(":memory:")) as qdrant:
         source, embedder = FixtureSource([track("one")]), FixtureEmbedder()
         original = embedder.embed
+
         def interrupted(texts):
             if len(embedder.calls) == 1:
                 raise RuntimeError("sensitive upstream failure")
             return original(texts)
+
         monkeypatch.setattr(embedder, "embed", interrupted)
         with pytest.raises(ApplicationError) as error:
             ingest(qdrant, source, embedder, batch_size=1)
@@ -220,29 +219,3 @@ def test_wrong_vector_dimensions_never_write_song_points():
             ingest(qdrant, source, embedder)
         assert error.value.code == "invalid_embeddings"
         assert qdrant.get_collection("native").points_count == 1
-
-
-def test_effective_openai_endpoint_changes_cache_and_refuses_old_collection(tmp_path, monkeypatch):
-    from resonance.embedders import create_embedder_for_name
-    (tmp_path / "endpoint.yaml").write_text("type: openai\nmodel: synthetic-v1\ndimensions: 3\n")
-    monkeypatch.setenv("OPENAI_BASE_URL", "https://first.test/v1")
-    first = create_embedder_for_name("endpoint", config_dir=tmp_path)
-    first.embed = FixtureEmbedder().embed
-    with closing(QdrantClient(":memory:")) as qdrant:
-        source = FixtureSource([track("one")])
-        ingest(qdrant, source, first)
-        assert first.profile["endpoint"] == str(first._client.base_url).rstrip("/") == "https://first.test/v1"
-        monkeypatch.setenv("OPENAI_BASE_URL", "https://second.test/v1")
-        second = create_embedder_for_name("endpoint", config_dir=tmp_path)
-        assert first is not second
-        assert second.profile["endpoint"] == "https://second.test/v1"
-        second.embed = lambda _: pytest.fail("Endpoint mismatch must fail before embedding")
-        for operation in (
-            lambda: ingest(qdrant, source, second),
-            lambda: run_search(qdrant, second, "query", "native", source_binding=source.binding),
-        ):
-            with pytest.raises(ApplicationError) as error:
-                operation()
-            assert error.value.code == "collection_incompatible"
-    first.close()
-    second.close()

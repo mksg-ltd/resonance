@@ -1,19 +1,11 @@
 """Tests for chunking logic."""
 
-from pathlib import Path
-
 from resonance.chunker import chunk_song_data
-from resonance.models import LrcLine, SongData
+from resonance.models import LrcLine, Track
 
 
-def _make_song(lines: list[LrcLine], artist: str = "Test", title: str = "Song") -> SongData:
-    return SongData(
-        artist=artist,
-        title=title,
-        audio_path=Path("/music/test.flac"),
-        filename="test.flac",
-        lines=lines,
-    )
+def _make_song(lines: list[LrcLine], artist: str = "Test", title: str = "Song") -> Track:
+    return Track(source_id="test", library_id="1", song_id="song-1", artist=artist, title=title, lines=lines)
 
 
 class TestChunkSongData:

@@ -9,7 +9,7 @@ Semantic search engine for song lyrics. Users search by meaning/theme ("songs ab
 ## Stack
 
 - **API:** FastAPI + uvicorn
-- **Config:** YAML + pydantic-settings
+- **Config:** Bundled embedding profile YAML + pydantic-settings environment settings
 - **Vector DB:** Qdrant (Docker)
 - **Embeddings:** TEI through its OpenAI-compatible API; explicit OpenAI/Ollama configurations also supported
 - **Package manager:** uv
@@ -21,8 +21,10 @@ Transport-independent application operations live in `application/`. CLI and Fas
 are thin adapters; no CLI imports route-owned business logic. Navidrome supplies song
 identity, metadata, and structured lyrics, with no music filesystem mount.
 
-Settings load from `.env`/environment using pydantic-settings. Provider YAML files
-load from `config/{name}.yaml` or `~/.config/resonance/`. Main settings are not YAML.
+Settings load from `.env`/environment using pydantic-settings. Supported embedding
+profiles ship in `resonance/data/embedding_profiles.yaml`; endpoint and credential
+values come from environment settings. There is no user-maintained provider config
+directory.
 Native collections bind server/account/library and effective embedding/index settings.
 Qdrant owns actual section-completion state. SQLite is only for native playlist-save
 operations, not track mapping. Full per-library refresh, UI/MCP, and seed/theme playlist
@@ -52,7 +54,7 @@ generation remain future scope.
 - Tests use FastAPI TestClient with mocked external APIs (OpenAI, Qdrant)
 - Domain models are dataclasses in `models.py`
 - Config loaded once at startup, stored in `app.state`
-- Production discovery uses an explicit Navidrome library ID; legacy scanner/raw LRC/M3U tools remain independent
+- Production discovery uses an explicit Navidrome library ID; filesystem scanning, raw-LRC, and local M3U paths are retired
 
 ## Project Structure
 
@@ -62,22 +64,22 @@ src/resonance/
 ├── navidrome.py       # Form POST API, paging, metadata/lyrics, XML playlists
 ├── state.py           # Transactional SQLite save-operation journal
 ├── models.py          # Track, lyric primitives, server response DTOs
-├── config.py          # Settings/dotenv and named provider YAML
+├── config.py          # Pydantic environment settings
+├── data/              # Bundled embedding profile catalog
 ├── embedders/         # OpenAI-compatible/TEI and Ollama clients
-├── routes/            # Thin HTTP adapters, native auth, legacy M3U
+├── routes/            # Thin HTTP adapters and native auth
 ├── ingest.py          # Native ingestion CLI
 ├── search.py          # Semantic search CLI
 ├── library.py         # Read-only native inspection CLI
 ├── playlists.py       # Native save/status CLI
-├── chunker.py         # Tags/gaps/min-lines lyric chunking
-├── parser.py          # Raw LRC parsing (legacy tools)
-└── scanner.py         # Legacy filesystem tools only
+└── chunker.py         # Tags/gaps/min-lines lyric chunking
 ```
 
 ## Gotchas
 
-- Env var for OpenAI key is `OPENAI_API_KEY` (normalized from legacy `OPEN_AI_KEY`)
-- Collection metadata in Qdrant stores provider/model/dimensions — collections are self-describing
+- Embedding runtime settings use `RESONANCE__EMBEDDING__PROFILE`, `BASE_URL`, and
+  `API_KEY`; legacy shell `OPENAI_API_KEY` remains a fallback for OpenAI.
+- Collection metadata in Qdrant stores profile/provider/model/dimensions — collections are self-describing
 - Native ingest never deletes/recreates a collection automatically. Identical partial writes can resume; changed indexed lyrics require a new collection until refresh is implemented. Native ingest HTTP requires an operator token.
 - `.venv` lives at project root (not in `src/`)
 - PRDs in `docs/prds/`, plans in `docs/plans/`

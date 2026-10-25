@@ -12,7 +12,6 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./config:/app/config:ro
       - ./ui:/app/ui:ro
       - playlist_state:/app/state
     environment:
@@ -44,7 +43,7 @@ services:
     volumes:
       - ./tei_cache:/data
     environment:
-      - MODEL_ID=krutrim-ai-labs/Vyakyarth
+      - MODEL_ID=${TEI_MODEL_ID:-krutrim-ai-labs/Vyakyarth}
       - MAX_BATCH_TOKENS=16384
 
 volumes:

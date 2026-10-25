@@ -112,7 +112,7 @@
         border-left: 2px solid #3b4261;
         padding-left: 12px;
       }
-      .filename {
+      .song-id {
         color: #565f89;
         font-size: 0.75em;
         margin-top: 8px;
@@ -252,7 +252,7 @@
                 </div>
                 <div class="section-info">${escapeHtml(r.section)} (part ${r.position + 1}/${r.total_sections})</div>
                 <div class="lyrics">${lyricsEscaped}</div>
-                <div class="filename">${escapeHtml(r.song_id || r.filename)}</div>
+                <div class="song-id">${escapeHtml(r.song_id)}</div>
               </div>`;
           }
 

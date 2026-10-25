@@ -16,7 +16,7 @@ from resonance.navidrome import NavidromeClient
 
 def main() -> None:
     parser = ArgumentParser(description="Index synced lyrics from one Navidrome library")
-    parser.add_argument("--provider", required=True, help="Named embedding config under config/")
+    parser.add_argument("--profile", "--provider", dest="profile", help="Embedding profile ID from the bundled catalog")
     parser.add_argument("--library", required=True, help="Navidrome music-folder ID")
     parser.add_argument("--collection", help="New or identically bound Qdrant collection")
     parser.add_argument("--batch-size", type=int, default=32)
@@ -24,6 +24,7 @@ def main() -> None:
     parser.add_argument("--max-tracks", type=int, help="Bound this run; no deletion or pruning occurs")
     args = parser.parse_args()
     settings = Settings()
+    profile_id = args.profile or settings.embedding.profile
     source = None
     qdrant = None
     try:
@@ -34,11 +35,11 @@ def main() -> None:
         )
         result = run_ingest(
             qdrant,
-            resolve_embedder(args.provider),
+            resolve_embedder(profile_id, settings.embedding),
             settings,
             source=source,
             library_id=args.library,
-            config_name=args.provider,
+            config_name=profile_id,
             collection=args.collection,
             batch_size=args.batch_size,
             gap_threshold_sec=args.gap,

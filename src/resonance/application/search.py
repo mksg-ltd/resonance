@@ -1,11 +1,12 @@
-"""Shared lyric search, with native recording identity and legacy read compatibility."""
+"""Shared semantic search over Navidrome-native collections."""
 
 from dataclasses import dataclass
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import FieldCondition, Filter, MatchValue
+from qdrant_client.models import FieldCondition, MatchValue
 
 from resonance.application.indexing import (
+    SCHEMA_VERSION,
     embedding_profile,
     read_metadata,
     section_filter,
@@ -26,63 +27,13 @@ class SearchResult:
     position: int
     total_sections: int
     lyrics: str
-    filename: str = ""
-    audio_path: str = ""
-    lyrics_source: str = "sidecar_lrc"
+    lyrics_source: str = "navidrome"
     album: str | None = None
     source_id: str | None = None
     library_id: str | None = None
     song_id: str | None = None
     start_sec: float | None = None
     duration_sec: float | None = None
-
-
-def _legacy_search(  # noqa: PLR0913
-    qdrant: QdrantClient,
-    embedder: EmbeddingProvider,
-    query: str,
-    collection: str,
-    artist: str | None = None,
-    limit: int = 15,
-) -> list[SearchResult]:
-    """Execute semantic search — reusable by both API route and CLI."""
-    query_vector = embedder.embed([query])[0]
-
-    query_filter = None
-    if artist:
-        query_filter = Filter(must=[FieldCondition(key="artist", match=MatchValue(value=artist))])
-
-    results = qdrant.query_points(
-        collection_name=collection,
-        query=query_vector,
-        query_filter=query_filter,
-        limit=limit,
-    )
-
-    # Deduplicate by song — keep highest scoring section per artist+title
-    seen: dict[str, SearchResult] = {}
-    for point in results.points:
-        p = point.payload
-        if not p or p.get("_metadata"):
-            continue
-        key = f"{p['artist']}|{p['title']}"
-        result = SearchResult(
-            artist=p["artist"],
-            title=p["title"],
-            album=p.get("album"),
-            score=point.score,
-            section=p["section"],
-            position=p["position"],
-            total_sections=p["total_sections"],
-            lyrics=p["lyrics"],
-            filename=p.get("filename", ""),
-            audio_path=p.get("audio_path", ""),
-            lyrics_source=p.get("lyrics_source", "sidecar_lrc"),
-        )
-        if key not in seen or point.score > seen[key].score:
-            seen[key] = result
-
-    return sorted(seen.values(), key=lambda r: r.score, reverse=True)[:limit]
 
 
 @external_errors("Search dependency failed")
@@ -96,14 +47,16 @@ def run_search(  # noqa: PLR0913
     *,
     source_binding: dict[str, str] | None = None,
 ) -> list[SearchResult]:
-    """Search native complete recordings, retaining legacy collection read behavior."""
+    """Search complete recordings from one compatible Navidrome-native collection."""
     if not query.strip() or not 1 <= limit <= 100:
         fail("A nonempty query and limit between 1 and 100 are required")
     metadata = read_metadata(qdrant, collection)
-    if metadata.get("schema_version") is None:
-        if metadata.get("model") and metadata["model"] != embedder.model_name:
-            fail("Collection model differs from the active embedder", code="collection_incompatible", status=409)
-        return _legacy_search(qdrant, embedder, query, collection, artist, limit)
+    if metadata.get("schema_version") != SCHEMA_VERSION:
+        fail(
+            "Collection uses an unsupported legacy schema; reingest the Navidrome library",
+            code="collection_incompatible",
+            status=409,
+        )
     if source_binding is None:
         fail("Native search requires the configured source binding", code="not_configured", status=503)
     validate_binding(metadata, source_binding, embedding_profile(embedder))

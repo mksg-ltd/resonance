@@ -1,3 +1,0 @@
-type: ollama
-base_url: http://localhost:11434
-model: nomic-embed-text

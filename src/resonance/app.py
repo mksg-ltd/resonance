@@ -20,7 +20,6 @@ from resonance.routes.config import router as config_router
 from resonance.routes.health import router as health_router
 from resonance.routes.ingest import router as ingest_router
 from resonance.routes.navidrome import router as navidrome_router
-from resonance.routes.playlists import router as playlists_router
 from resonance.routes.search import router as search_router
 
 logger = logging.getLogger(__name__)
@@ -80,7 +79,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(ingest_router)
     app.include_router(config_router)
     app.include_router(collections_router)
-    app.include_router(playlists_router)
     app.include_router(navidrome_router)
 
     # Serve static UI files (if ui/ directory exists)

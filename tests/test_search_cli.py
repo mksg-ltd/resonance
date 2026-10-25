@@ -28,7 +28,7 @@ def test_search_cli_ids_can_be_used_directly_by_save_cli(tmp_path, monkeypatch, 
             collection="native",
         )
         monkeypatch.setattr(search, "Settings", lambda: settings)
-        monkeypatch.setattr(search, "resolve_embedder", lambda _: embedder)
+        monkeypatch.setattr(search, "resolve_embedder", lambda *_: embedder)
         monkeypatch.setattr(search, "QdrantClient", lambda **_: qdrant)
         monkeypatch.setattr(qdrant, "close", lambda: None)
         monkeypatch.setattr("sys.argv", ["resonance-search", "paper stars", "--collection", "native", "--limit", "3"])

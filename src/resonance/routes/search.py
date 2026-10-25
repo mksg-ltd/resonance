@@ -1,4 +1,4 @@
-"""Thin semantic-search HTTP adapter; legacy collection reads remain available."""
+"""Thin semantic-search HTTP adapter for Navidrome-native collections."""
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -32,7 +32,7 @@ def search(body: SearchRequest, request: Request) -> SearchResponse:
     config_name = metadata.get("config_name")
     if not config_name:
         raise HTTPException(
-            status_code=400, detail="Collection has no provider configuration; choose a compatible index"
+            status_code=400, detail="Collection has no embedding profile; reingest the Navidrome library"
         )
     binding = (
         source_binding(request.app.state.settings.navidrome)
@@ -41,7 +41,7 @@ def search(body: SearchRequest, request: Request) -> SearchResponse:
     )
     results = run_search(
         qdrant,
-        embedders.resolve_embedder(config_name),
+        embedders.resolve_embedder(config_name, request.app.state.settings.embedding),
         body.query,
         body.collection,
         body.artist,

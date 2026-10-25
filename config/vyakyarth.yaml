@@ -1,4 +1,0 @@
-type: openai
-model: krutrim-ai-labs/Vyakyarth
-base_url: http://tei:80/v1
-dimensions: 768

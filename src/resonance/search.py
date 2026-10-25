@@ -2,8 +2,8 @@
 Search lyrics in Qdrant by semantic similarity.
 
 Usage:
-    resonance-search --provider ollama-bge-m3 "songs about letting go"
-    resonance-search --provider ollama-bge-m3 "love" --artist "Coldplay"
+    resonance-search --profile ollama-nomic-text "songs about letting go"
+    resonance-search --profile vyakyarth "love" --artist "Coldplay"
 """
 
 import json
@@ -17,7 +17,7 @@ from .application.indexing import SCHEMA_VERSION, read_metadata
 from .application.search import run_search
 from .config import Settings
 from .embedders import close_embedders, resolve_embedder
-from .errors import ApplicationError, fail
+from .errors import ApplicationError
 from .navidrome import source_binding
 
 
@@ -25,8 +25,10 @@ def main() -> None:
     parser = ArgumentParser(description="Search lyrics by semantic similarity")
     parser.add_argument("query", help="Natural language query")
     parser.add_argument(
+        "--profile",
         "--provider",
-        help="Override the collection's stored provider config (must remain compatible)",
+        dest="profile",
+        help="Override the collection's stored embedding profile (must remain compatible)",
     )
     parser.add_argument("--collection", required=True, help="Qdrant collection name")
     parser.add_argument("--artist", help="Filter by artist name")
@@ -52,12 +54,10 @@ def _execute(args: Namespace) -> None:
     ) as qdrant:
         collection = args.collection
         metadata = read_metadata(qdrant, collection)
-        provider = args.provider or metadata.get("config_name")
-        if not provider:
-            fail("Collection has no provider config; pass --provider")
-        embedder = resolve_embedder(provider)
+        profile_id = args.profile or metadata.get("config_name") or settings.embedding.profile
+        embedder = resolve_embedder(profile_id, settings.embedding)
         print(f'\nQuery: "{args.query}"')
-        print(f"Collection: {collection} | Provider: {provider} | Model: {embedder.model_name}")
+        print(f"Collection: {collection} | Profile: {profile_id} | Model: {embedder.model_name}")
         if args.artist:
             print(f"Filter: artist = {args.artist}")
 

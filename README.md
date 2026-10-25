@@ -30,24 +30,25 @@ execution is the trusted operator interface and does not require that token. Pyt
 and Compose parse `.env`; Make does not source or expand credentials as Make syntax.
 Do not commit `.env` or real credentials.
 
-Embedding profiles are named YAML files under `config/` or `~/.config/resonance/`.
-An OpenAI-compatible TEI profile looks like:
+Supported embedding profiles ship in Resonance's bundled catalog. Select a profile
+and the endpoint reachable from the process running Resonance in `.env`:
 
-```yaml
-type: openai
-base_url: http://localhost:8085/v1
-api_key: dummy
-model: krutrim-ai-labs/Vyakyarth
-dimensions: 768
+```dotenv
+RESONANCE__EMBEDDING__PROFILE=vyakyarth
+RESONANCE__EMBEDDING__BASE_URL=http://tei:80/v1
+RESONANCE__EMBEDDING__API_KEY=
 ```
 
-Use the endpoint reachable from the process running Resonance. Within Compose,
-TEI is reachable as `http://tei/v1`; host-run clients use the published port 8085.
-Use the actual served model and dimensions. Configure a revision when known and
-create a new collection after changing model weights. Provider type describes the
-API transport; it is not proof of the model's identity. Explicitly configuring a
-hosted endpoint sends selected lyric sections/search text there; no cloud fallback
-is performed.
+Inside Compose, TEI is reachable at `http://tei:80/v1`; a host-run client uses
+`http://localhost:8085/v1`. The catalog contains the profile's model ID, protocol,
+and expected dimensions. TEI serves the model selected at service startup, so keep
+its `TEI_MODEL_ID` in `.env` aligned with the active profile's `model_id` and restart
+TEI when changing models. The profile ID cannot switch a running TEI model.
+For Ollama, select `ollama-nomic-text` and set the base URL to the Ollama service
+(for example, `http://ollama:11434` in Compose); the profile selects Ollama's API
+protocol. For a hosted endpoint, set its base URL and API key explicitly; there is
+no cloud fallback. Profile IDs and supported dimensions are listed in
+[`embedding_profiles.yaml`](src/resonance/data/embedding_profiles.yaml).
 
 ```bash
 make up       # Qdrant + TEI dependencies
@@ -74,20 +75,23 @@ Synced lyric offsets are normalized; absent/unsynced-only lyrics are reported.
 ## Ingest and Search
 
 ```bash
-uv run resonance-ingest --provider vyakyarth --library 2 --collection home_english_vyakyarth --max-tracks 10
+uv run resonance-ingest --profile vyakyarth --library 2 --collection home_english_vyakyarth --max-tracks 10
 uv run resonance-search --collection home_english_vyakyarth "songs about letting go"
 ```
 
 Omit `--max-tracks` only when deliberately indexing the full selected library. It
-is a run bound, not a claim that the entire library was enumerated. Provider config
-can be selected automatically from collection metadata during search; `--provider`
-is an optional compatible override. Exact `--artist` filtering remains available.
+is a run bound, not a claim that the entire library was enumerated. The configured
+profile is used by default; `--profile` overrides it for one ingest. Search resolves
+the profile ID stored in collection metadata and accepts `--profile` as an optional
+compatible override. `--provider` remains a deprecated alias. Exact `--artist`
+filtering remains available.
 
 Each native collection binds one server/account/library and one effective embedding
 profile, with model/dimensions/chunking/schema metadata. Incompatible scopes/configs
-are refused before appending vectors. Existing file-based collections stay readable;
-choose a new native collection for the migration. No collection is deleted/recreated
-automatically, and `--data-dir`/`--force` are not native ingestion inputs.
+are refused before appending vectors. File-based collections are no longer searchable;
+reingest the Navidrome library into a native collection. No collection is
+deleted/recreated automatically, and `--data-dir`/`--force` are not native ingestion
+inputs.
 
 Song IDs are retained in every section and search hit. Distinct recordings with the
 same artist/title remain distinct. Section IDs and lyric/index fingerprints are
@@ -136,18 +140,17 @@ General playlist update/delete and automatic uncertain-outcome repair are deferr
 | GET        | `/health`                                                       | Qdrant connectivity                                 |
 | GET        | `/api/config`                                                   | Public configuration with secrets excluded/redacted |
 | GET/DELETE | `/api/collections[/<name>]`                                     | List bindings / explicitly delete an index          |
-| POST       | `/api/search`                                                   | Query a selected native or legacy collection        |
+| POST       | `/api/search`                                                   | Query a Navidrome-native collection                 |
 | POST       | `/api/ingest`                                                   | Protected native library ingestion                  |
 | GET        | `/api/navidrome/connection`, `/libraries`, `/tracks`, `/lyrics` | Protected source inspection                         |
 | POST       | `/api/navidrome/playlists`                                      | Protected native private save                       |
 | GET        | `/api/navidrome/operations/<operation_id>?library_id=2`         | Protected save status/reconciliation                |
-| POST       | `/api/playlists`                                                | Legacy explicit-path M3U file creation              |
 
 All `/api/navidrome/...` paths and native ingestion require `Authorization: Bearer <operator-token>` and a JSON body:
 
 ```json
 {
-  "provider": "vyakyarth",
+  "profile": "vyakyarth",
   "library_id": "2",
   "collection": "home_english_vyakyarth",
   "max_tracks": 10
@@ -156,9 +159,8 @@ All `/api/navidrome/...` paths and native ingestion require `Authorization: Bear
 
 Unknown fields, including obsolete mounted-directory inputs, are rejected. The
 static debug search page remains at `/ui`; the full frontend is separate work.
-Legacy M3U creation still operates on explicitly submitted paths/output directories;
-it is not part of native Navidrome playback or a reason to restore a music mount.
-Raw LRC inspection remains available through `resonance-chunks file.lrc`.
+`/api/navidrome/playlists` is the supported playlist creation path. The former
+local M3U endpoint and raw-LRC inspection command have been removed.
 
 ## Development
 

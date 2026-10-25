@@ -1,15 +1,21 @@
 ---
 phase: launch
-status: ready
+status: superseded
+superseded_by: docs/prds/09-navidrome-semantic-playlists.md
 created: 2026-03-18
 updated: 2026-03-19
 author: mk
 tags: [jellyfin, plugin, integration]
 ---
 
-# Jellyfin Plugin Architecture Research
+# Jellyfin Plugin Architecture Research (Superseded)
 
-**Status**: Ready for Development
+**Status**: Superseded by [PRD-09](09-navidrome-semantic-playlists.md)
+
+This document records the earlier Jellyfin integration exploration. The project
+subsequently chose Navidrome as its first and only supported music server because
+the Jellyfin plugin ecosystem and UI integration are fragmented. PRD-09 supersedes
+this direction; the research below is historical context, not active product scope.
 
 ---
 

@@ -1,7 +1,6 @@
 """Domain models for lyrics and library tracks."""
 
 from dataclasses import dataclass, field
-from pathlib import Path
 
 
 @dataclass
@@ -45,22 +44,6 @@ class LrcChunk:
     @property
     def duration_sec(self) -> float:
         return self.end_sec - self.start_sec
-
-
-@dataclass
-class SongData:
-    """A discovered song with its lyrics and metadata.
-
-    Yielded by LibraryScanner, consumed by the ingest pipeline.
-    """
-
-    artist: str
-    title: str
-    audio_path: Path
-    filename: str
-    lines: list[LrcLine]
-    album: str | None = None
-    lyrics_source: str = "sidecar_lrc"
 
 
 @dataclass

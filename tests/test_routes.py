@@ -1,9 +1,7 @@
 """Tests for API routes."""
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from fastapi.testclient import TestClient
 
@@ -42,125 +40,6 @@ def _make_test_client(debug: bool = True) -> tuple[TestClient, MagicMock, MagicM
     return TestClient(app), mock_qdrant, mock_embedder
 
 
-class TestSearchRoute:
-    @pytest.fixture(autouse=True)
-    def _mock_embedder_factory(self):
-        """Mock create_embedder_for_name so search tests don't need real conf.d files."""
-        mock_embedder = MagicMock()
-        mock_embedder.embed.return_value = [[0.1, 0.2, 0.3]]
-        mock_embedder.dimensions = 1536
-        mock_embedder.model_name = "text-embedding-3-small"
-        mock_embedder.provider_name = "openai"
-        with patch("resonance.embedders.create_embedder_for_name", return_value=mock_embedder):
-            yield
-
-    def test_search_returns_results(self):
-        client, mock_qdrant, mock_embedder = _make_test_client()
-
-        # Mock Qdrant search response
-        mock_point = MagicMock()
-        mock_point.score = 0.95
-        mock_point.payload = {
-            "artist": "Coldplay",
-            "title": "Fix You",
-            "album": "X&Y",
-            "section": "Chorus",
-            "position": 1,
-            "total_sections": 4,
-            "lyrics": "Lights will guide you home\nAnd ignite your bones",
-            "filename": "05 - Coldplay - Fix You.flac",
-            "audio_path": "Coldplay/X&Y/05 - Coldplay - Fix You.flac",
-            "lyrics_source": "sidecar_lrc",
-        }
-        mock_qdrant.query_points.return_value = MagicMock(points=[mock_point])
-
-        response = client.post("/api/search", json={"query": "songs about hope", "collection": "test_lyrics"})
-        assert response.status_code == 200
-        data = response.json()
-        assert data["query"] == "songs about hope"
-        assert len(data["results"]) == 1
-        assert data["results"][0]["artist"] == "Coldplay"
-        assert data["results"][0]["score"] == 0.95
-        assert data["results"][0]["audio_path"] == "Coldplay/X&Y/05 - Coldplay - Fix You.flac"
-        assert data["results"][0]["album"] == "X&Y"
-
-    def test_search_skips_collection_metadata_point(self):
-        client, mock_qdrant, _ = _make_test_client()
-        metadata = MagicMock(score=0.5, payload={"_metadata": True, "config_name": "test-provider"})
-        song = MagicMock(
-            score=0.9,
-            payload={
-                "artist": "Coldplay",
-                "title": "Bani Adam",
-                "section": "Opening",
-                "position": 0,
-                "total_sections": 1,
-                "lyrics": "sample text",
-                "filename": "track.flac",
-            },
-        )
-        mock_qdrant.query_points.return_value = MagicMock(points=[metadata, song])
-
-        response = client.post(
-            "/api/search", json={"query": "shared humanity", "collection": "test_lyrics", "limit": 50}
-        )
-
-        assert response.status_code == 200
-        assert [result["title"] for result in response.json()["results"]] == ["Bani Adam"]
-
-    def test_search_with_artist_filter(self):
-        client, mock_qdrant, mock_embedder = _make_test_client()
-        mock_qdrant.query_points.return_value = MagicMock(points=[])
-
-        response = client.post("/api/search", json={"query": "love", "collection": "test_lyrics", "artist": "Adele"})
-        assert response.status_code == 200
-
-        # Verify filter was passed to Qdrant
-        call_kwargs = mock_qdrant.query_points.call_args.kwargs
-        assert call_kwargs["query_filter"] is not None
-
-    def test_search_deduplicates_by_song(self):
-        client, mock_qdrant, mock_embedder = _make_test_client()
-
-        # Two results from same song, different sections
-        point1 = MagicMock()
-        point1.score = 0.90
-        point1.payload = {
-            "artist": "Coldplay",
-            "title": "Fix You",
-            "album": "X&Y",
-            "section": "Verse 1",
-            "position": 0,
-            "total_sections": 4,
-            "lyrics": "When you try your best",
-            "filename": "05 - Coldplay - Fix You.flac",
-            "audio_path": "Coldplay/X&Y/05 - Coldplay - Fix You.flac",
-            "lyrics_source": "sidecar_lrc",
-        }
-        point2 = MagicMock()
-        point2.score = 0.95
-        point2.payload = {
-            "artist": "Coldplay",
-            "title": "Fix You",
-            "album": "X&Y",
-            "section": "Chorus",
-            "position": 1,
-            "total_sections": 4,
-            "lyrics": "Lights will guide you home",
-            "filename": "05 - Coldplay - Fix You.flac",
-            "audio_path": "Coldplay/X&Y/05 - Coldplay - Fix You.flac",
-            "lyrics_source": "sidecar_lrc",
-        }
-        mock_qdrant.query_points.return_value = MagicMock(points=[point1, point2])
-
-        response = client.post("/api/search", json={"query": "hope", "collection": "test_lyrics"})
-        data = response.json()
-        # Should deduplicate — only one result for "Fix You" (highest score)
-        assert len(data["results"]) == 1
-        assert data["results"][0]["score"] == 0.95
-        assert data["results"][0]["section"] == "Chorus"
-
-
 class TestIngestRoute:
     def _native(self):
         from qdrant_client import QdrantClient
@@ -177,7 +56,7 @@ class TestIngestRoute:
         client, qdrant, source, embedder = self._native()
         payload = {"provider": "fixture", "library_id": "2", "collection": "native"}
         headers = {"Authorization": "Bearer operator-token"}
-        with patch("resonance.embedders.create_embedder_for_name", return_value=embedder):
+        with patch("resonance.embedders.resolve_embedder", return_value=embedder):
             first = client.post("/api/ingest", json=payload, headers=headers)
             assert first.status_code == 200
             assert first.json()["tracks_processed"] == 2
@@ -191,7 +70,7 @@ class TestIngestRoute:
         client, qdrant, source, embedder = self._native()
         payload = {"provider": "fixture", "library_id": "2", "collection": "native"}
         headers = {"Authorization": "Bearer operator-token"}
-        with patch("resonance.embedders.create_embedder_for_name", return_value=embedder):
+        with patch("resonance.embedders.resolve_embedder", return_value=embedder):
             assert client.post("/api/ingest", json=payload, headers=headers).status_code == 200
             count = qdrant.get_collection("native").points_count
             embedder.profile["model"] = "different-model"

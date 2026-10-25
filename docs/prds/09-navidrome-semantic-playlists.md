@@ -37,9 +37,9 @@ Subsonic/OpenSubsonic API. Similarity means **lyric meaning**, not necessarily s
 genre, tempo, or mood inferred from audio.
 
 This draft proposes behavior and validation gates, not a commitment to implement
-every item. Navidrome is the first and only required server for this proposal;
-Jellyfin is not a dependency or acceptance target. Earlier Jellyfin-oriented PRDs
-remain historical context, not requirements inherited by this feature.
+every item. Navidrome is the first and only supported music server; Jellyfin is not
+a dependency or acceptance target. The earlier [Jellyfin plugin PRD](04-jellyfin-plugin.md)
+is superseded by this direction and remains only as historical context.
 
 ## Goals
 
@@ -55,7 +55,7 @@ remain historical context, not requirements inherited by this feature.
 
 ## Non-Goals
 
-- Implementing this PRD as part of writing it, or changing existing M3U behavior.
+- Implementing every follow-on in one release.
 - M3U export/import as a substitute for a server playlist.
 - A Jellyfin plugin, multi-server synchronization, audio analysis, or streaming music
   discovery outside the user's library.
@@ -70,23 +70,17 @@ remain historical context, not requirements inherited by this feature.
 
 ## Current State and Implementation Gap
 
-Facts checked against the repository on 2026-10-25:
+The initial proof-of-concept baseline, checked on 2026-10-25, had:
 
-- [LibraryScanner](../../src/resonance/scanner.py) discovers audio files, extracts
-  embedded synced lyrics or sidecar LRC, and reads artist/title/album metadata.
-- [Ingestion](../../src/resonance/routes/ingest.py) stores section vectors, lyric text,
-  section position/timing, source, and library-relative `audio_path`. Qdrant point IDs
-  are assigned to chunks; they are not stable recording or server song identities.
-- [Search](../../src/resonance/routes/search.py) embeds one text query and retrieves
-  `limit` section hits, then deduplicates by `artist|title`. Repeated sections can
-  leave fewer unique songs than requested; distinct recordings can be conflated.
-- [Playlist creation](../../src/resonance/routes/playlists.py) writes a local M3U
-  from submitted paths. It does not create a Navidrome playlist or verify playback.
+- Local scanner/LRC ingestion stored file paths, and search deduplicated by
+  `artist|title`.
+- A local M3U endpoint wrote playlists from submitted paths; it did not create a
+  Navidrome playlist or verify playback.
 - The inspected routes and embedder factory have no Navidrome adapter, seed-resolution
   flow, combined ranking, persistent song-ID mapping, or save-operation reconciliation.
-- FastAPI already exposes search, ingestion, collections, configuration, health, and
-  M3U creation. The CLI tools reuse `run_ingest()` and `run_search()`, although those
-  functions currently live in HTTP route modules. The project is not CLI-only.
+- FastAPI exposes search, Navidrome ingestion, collections, configuration, health,
+  and Navidrome playlist operations. CLI and FastAPI call shared application
+  operations.
 - [The current UI](../../ui/index.html) is a single HTML file with collection selection,
   text search, score filtering, and lyric excerpts. It has no selection, ordering,
   playlist creation, or Navidrome controls.
@@ -105,9 +99,11 @@ filename assumption, module split, or CLI argument. The new Navidrome workflow r
 mounted-file ingestion; adapting the old interfaces is part of that migration.
 
 At the initial baseline the user had removed the music bind mount from Compose and
-deleted the separate development Compose file. The staged backend implementation below
-now replaces native ingestion/search with the Navidrome APIs and removes stale Makefile
-references. Legacy M3U and raw-LRC tools retain their separate filesystem behavior.
+deleted the separate development Compose file. The staged backend implementation
+replaced ingestion/search with Navidrome APIs. The follow-on cleanup in
+[PRD-11](11-embedding-profile-configuration.md) removes the now-unused scanner,
+raw-LRC tooling, and local M3U route; it does not remove the shared chunker or
+Navidrome playlist operations.
 
 The existing `embedders/base.py`, `ollama.py`, and `openai.py` layout is also flexible.
 TEI is the current serving direction. Keep a small batch-embedding contract and actual
@@ -236,17 +232,16 @@ create requires explicit acknowledgment.
 - Store source/server identity, music-folder ID, and Navidrome song ID on every
   indexed section. Preserve metadata and lyric evidence; filesystem paths are not
   ingestion requirements or identity. Deduplicate search by server/song ID.
-- Record source scope, schema version, provider/model/dimensions in collection
-  metadata. Reject incompatible collections; do not mix old file-based payloads
-  and new Navidrome-native payloads in the same workflow.
+- Record source scope, schema version, profile/model/dimensions in collection
+  metadata. Navidrome-native collections are supported; old file-based collections
+  require reingestion and are not searched by current code.
 - Bind each collection to **Navidrome instance + library ID + embedding profile**.
   A readable name such as `home_english_bge_m3` is a label; metadata is authoritative.
   Library renames do not change identity. Record the actual model/revision and relevant
   embedding settings, not only a mutable config filename; equal dimensions do not
   prove compatible models. Store chunking settings and index generation as well.
-- Build a new Navidrome-native collection as an explicit migration. Retain existing
-  collections until the new source is verified; do not guess missing song IDs from
-  filenames/titles or automatically delete/re-embed existing data.
+- Build a Navidrome-native collection through the current API ingestion flow. Do not
+  guess missing song IDs from filenames/titles or automatically delete/re-embed data.
 - Prepare incremental ingestion now: use deterministic section point IDs and retain
   source/song identity, a normalized lyric-content hash, an indexing-configuration
   fingerprint, section position/count, and indexing time. Repeating the same input
@@ -256,9 +251,9 @@ create requires explicit acknowledgment.
 - Treat Navidrome IDs as authoritative within the configured server instance, not
   globally or forever across server rebuilds. Scope stale-ID checks accordingly and
   rebuild/reconcile the index after an identity-changing server rebuild.
-- Remove Resonance's **music** bind mount after API ingestion is validated. Config,
-  Qdrant, model-cache, and optional save-journal volumes have separate purposes.
-  The existing M3U endpoint remains a legacy explicit-path operation, outside the new flow.
+- Resonance does not require a **music** bind mount. Qdrant, model-cache, and
+  optional save-journal volumes have separate purposes. Local M3U creation has been
+  removed; Navidrome playlist creation is the supported save path.
 
 ### First Release Authorization and Save Safety
 
@@ -394,11 +389,11 @@ server behavior, but is not an implementation of the shared application interfac
       writes cannot be classified as fully indexed merely because one section exists.
       A partial scan cannot silently remove existing indexed songs.
 - [x] Search returns song IDs and deduplicates by server/song identity, preserving
-      distinct recordings with identical titles. Existing collections are retained
-      during explicit migration to a separate Navidrome-native collection.
+      distinct recordings with identical titles. Navidrome-native collections are
+      retained; obsolete file-based collections require reingestion.
 - [x] CLI and FastAPI invoke the same application operation; the deployed ingestion
-      path works after removing Resonance's music bind mount. Legacy M3U behavior
-      remains an explicitly separate path rather than a dependency of native playlists.
+      path works without Resonance's music bind mount. Local M3U behavior was removed
+      in the POC cleanup and replaced by Navidrome playlist operations.
 
 ### First Backend Release: Verified Private Creation
 

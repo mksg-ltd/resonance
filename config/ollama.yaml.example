@@ -1,5 +1,0 @@
-# Ollama embedding provider configuration
-# Copy to ollama.yaml and adjust as needed.
-
-base_url: http://localhost:11434
-model: nomic-embed-text

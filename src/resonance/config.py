@@ -1,12 +1,8 @@
-"""Configuration management — env vars via pydantic-settings, provider configs from YAML."""
+"""Runtime settings from environment variables and .env."""
 
 import os
-import re
 from pathlib import Path
-from string import Template
 
-import yaml
-from dotenv import dotenv_values
 from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -23,6 +19,14 @@ class ChunkingConfig(BaseModel):
 
     gap_threshold_sec: float = 10.0
     min_chunk_lines: int = 2
+
+
+class EmbeddingRuntimeConfig(BaseModel):
+    """Runtime endpoint selection for a bundled embedding profile."""
+
+    profile: str = "vyakyarth"
+    base_url: str | None = None
+    api_key: SecretStr | None = None
 
 
 class OpenAIProviderConfig(BaseModel):
@@ -91,75 +95,7 @@ class Settings(BaseSettings):
     serve_docs: bool = False  # enables Swagger UI at /docs
     qdrant: QdrantConfig = QdrantConfig()
     chunking: ChunkingConfig = ChunkingConfig()
+    embedding: EmbeddingRuntimeConfig = Field(default_factory=EmbeddingRuntimeConfig)
     navidrome: NavidromeConfig = Field(default_factory=NavidromeConfig)
     api_token: SecretStr | None = None
     journal_path: Path = Path("data/playlist-operations.sqlite3")
-
-
-def _expand_env_vars(data: dict) -> dict:
-    """Recursively expand ${ENV_VAR} references in string values."""
-    result = {}
-    for key, value in data.items():
-        if isinstance(value, dict):
-            result[key] = _expand_env_vars(value)
-        elif isinstance(value, str):
-            variables = {key: value for key, value in dotenv_values(".env").items() if value is not None}
-            result[key] = Template(value).safe_substitute({**variables, **os.environ})
-        else:
-            result[key] = value
-    return result
-
-
-def _load_yaml(path: Path) -> dict:
-    """Load and parse a YAML file with env var expansion."""
-    with path.open() as f:
-        data = yaml.safe_load(f)
-    if not isinstance(data, dict):
-        return {}
-    return _expand_env_vars(data)
-
-
-def load_provider_config(
-    name: str, config_dir: Path | None = None
-) -> tuple[str, OpenAIProviderConfig | OllamaProviderConfig]:
-    """Load a named provider config from config/{name}.yaml.
-
-    Each config file must have a `type` field ("openai" or "ollama") that
-    determines which provider class to use. The filename is the config name.
-
-    Searches: explicit config_dir → config/ → ~/.config/resonance/
-
-    Returns (provider_type, config) tuple.
-    Raises ValueError if config file not found or type is unknown.
-    """
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name):
-        msg = "Provider configuration name must be a filename stem"
-        raise ValueError(msg)
-    search_dirs = []
-    if config_dir:
-        search_dirs.append(config_dir)
-    search_dirs.extend(
-        [
-            Path("config"),
-            Path.home() / ".config" / "resonance",
-        ]
-    )
-
-    for search_dir in search_dirs:
-        for ext in ("yaml", "yml"):
-            provider_file = search_dir / f"{name}.{ext}"
-            if provider_file.is_file():
-                data = _load_yaml(provider_file)
-                provider_type = data.pop("type", None)
-                if provider_type is None:
-                    msg = f"config/{name}.yaml missing 'type' field (must be 'openai' or 'ollama')"
-                    raise ValueError(msg)
-                if provider_type == "openai":
-                    return provider_type, OpenAIProviderConfig(**data)
-                if provider_type == "ollama":
-                    return provider_type, OllamaProviderConfig(**data)
-                msg = f"Unknown provider type '{provider_type}' in config/{name}.yaml. Supported: openai, ollama"
-                raise ValueError(msg)
-
-    msg = f"Provider config '{name}' not found. Create config/{name}.yaml with a 'type' field."
-    raise ValueError(msg)

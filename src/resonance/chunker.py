@@ -8,7 +8,7 @@ Two strategies, applied in priority order:
 
 import re
 
-from .models import LrcChunk, LrcLine, SongData, Track
+from .models import LrcChunk, LrcLine, Track
 
 # Matches section tags like [Chorus], [Verse 1-Akon], [Bridge], [Outro]
 SECTION_TAG_RE = re.compile(
@@ -103,11 +103,11 @@ def chunk_by_gaps(
 
 
 def chunk_song_data(
-    song: SongData | Track,
+    song: Track,
     gap_threshold_sec: float = 5.0,
     min_chunk_lines: int = 2,
 ) -> list[LrcChunk]:
-    """Chunk a SongData into sections.
+    """Chunk timestamped Navidrome lyrics into sections.
 
     Uses section tags if present, otherwise falls back to temporal gap detection.
     Returns empty list if song has no lines.

@@ -7,7 +7,6 @@ requires-python = ">=3.14"
 dependencies = [
     "fastapi>=0.115.0",
     "httpx>=0.28.0",
-    "mutagen>=1.47.0",
     "openai>=2.29.0",
     "pydantic-settings>=2.9.0",
     "python-dotenv>=1.0",
@@ -35,12 +34,14 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/resonance"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"src/resonance/data/embedding_profiles.yaml" = "resonance/data/embedding_profiles.yaml"
+
 [project.scripts]
 resonance-ingest = "resonance.ingest:main"
 resonance-search = "resonance.search:main"
 resonance-server = "resonance.app:cli"
 resonance-dev = "resonance.app:dev"
-resonance-chunks = "resonance.chunks:main"
 resonance-playlist = "resonance.playlists:main"
 resonance-library = "resonance.library:main"
 
