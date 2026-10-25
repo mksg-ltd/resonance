@@ -1,8 +1,9 @@
 ---
 phase: proof-of-concept
-status: draft
+status: complete
 backend_status: search-and-ingest-implemented
 backend_completed: 2026-10-25
+completed: 2026-10-25
 updated: 2026-10-25
 created: 2026-10-23
 author: strand
@@ -11,9 +12,9 @@ tags: [playlists, navidrome, semantic-search, lyrics]
 
 # Navidrome Semantic Playlists
 
-**Status**: Active product direction — backend and local search/ingestion PoC implemented; user-facing generation/MCP scope is follow-on work
+**Status**: Complete — Navidrome backend integration and the local operator search/ingestion PoC are implemented. Assistant-facing MCP and user UI are tracked separately in [PRD-12](12-assistant-user-experience.md).
 
-**Current delivery boundary**: Single-account Navidrome backend capabilities and a minimal local HTML proof of concept for an operator to ingest and search. The PoC is intentionally not the eventual user product. Ingestion and model/library configuration are administrative operations; semantic search and playlist creation are user-facing operations intended for assistant/MCP use. Vue, end-user authentication, and MCP are separate follow-on work.
+**Delivery boundary**: Single-account Navidrome backend capabilities and a minimal local HTML proof of concept for an operator to ingest and search. This is not the eventual user product. Ingestion and model/library configuration are administrative operations; semantic search and playlist creation are user-facing operations intended for assistant/MCP use. Those interfaces and workflows are explicitly outside this completed PRD.
 
 **Reconciliation**: Navidrome discovery, ingestion, collection creation, semantic search, and private playlist save operations exist in shared application operations with CLI/FastAPI adapters. The local HTML PoC provides an operator workflow for choosing a library, creating a collection, ingesting, and searching. Its purpose is to test backend workflows, not to define the eventual end-user UI. The [architecture decision](../adr/001-navidrome-application-boundary.md) and [runtime validation record](../plans/2026-10-25-navidrome-validation.md) document existing contracts and evidence.
 
@@ -25,7 +26,7 @@ Let a user index one selected Navidrome library and search its synced lyrics by 
 
 Navidrome is the only supported music server; Jellyfin is not a dependency or acceptance target. The earlier [Jellyfin plugin PRD](04-jellyfin-plugin.md) is superseded by this direction and remains historical context.
 
-## Goals
+## Goals (Completed)
 
 - Provide a small local page to choose a visible Navidrome library, create/populate an index collection, and search it.
 - Reuse the shared application operations so CLI, FastAPI, and future interfaces do not duplicate product logic.
@@ -46,18 +47,18 @@ Navidrome is the only supported music server; Jellyfin is not a dependency or ac
 - Seed/theme playlist generation, automatic prompt interpretation, candidate preview/editing, or any playlist-creation UI.
 - Playlist updates, public sharing, multi-user or multi-server support, scheduled ingestion, or full changed/deleted-track reconciliation.
 
-## Current State and Remaining Work
+## Delivered Scope
 
 The core backend work is already implemented and exercised. The cleanup in [PRD-11](11-embedding-profile-configuration.md) removed the obsolete scanner, raw-LRC tool, and local M3U route while preserving Navidrome operations and shared chunking.
 
-| Capability                                 | Current state                                                                                                        | Remaining work in this PoC                                             |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Navidrome account and library discovery    | Implemented through shared application operations and protected FastAPI routes                                       | Page selector is implemented; local acceptance remains                 |
-| Synced lyric ingestion and Qdrant indexing | Implemented in CLI/API; creates a derived collection when omitted or uses a supplied collection name                 | Page form is implemented; local acceptance remains                     |
-| New/unchanged track handling               | Re-running ingestion adds new eligible tracks, skips unchanged complete tracks, and resumes identical partial writes | Safe additive re-ingestion is implemented; it is not full refresh      |
-| Semantic search                            | Implemented in application layer, CLI, API, and HTML for existing collections                                        | Page now connects ingestion output to search; local acceptance remains |
-| Private Navidrome playlist save            | Implemented and runtime-validated through CLI/API                                                                    | No UI or generated playlist behavior in this milestone                 |
-| Minimal browser UI                         | Static page searches collections and now has token/library/ingestion controls                                        | Run local acceptance against the user's services                       |
+| Capability            | Delivered behavior                                                                                                                                                    |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Navidrome discovery   | Shared application operation and protected FastAPI route list visible libraries.                                                                                      |
+| Lyric ingestion       | Navidrome listing and structured lyric APIs feed chunking, embedding, and Qdrant indexing without a music bind mount.                                                 |
+| Re-ingestion          | New tracks are added; unchanged complete tracks are skipped; identical partial writes can resume. Changed/deleted-track reconciliation is not included.               |
+| Semantic search       | Shared operation is exposed through CLI, FastAPI, and the local HTML page with ranked lyric evidence.                                                                 |
+| Private playlist save | Shared operation is exposed through CLI/FastAPI and verified through Navidrome readback and client playback.                                                          |
+| Operator PoC          | Static HTML supports library selection, bounded ingestion, collection selection, and search with a local operator token. User testing confirmed ingestion and search. |
 
 ### Ingestion and Refresh Semantics
 
@@ -67,7 +68,7 @@ This is **not a full refresh**. When ingestion encounters already-indexed lyrics
 
 ### Static UI Runtime
 
-The page will be served separately as requested, for example with `python -m http.server 8080 --bind 127.0.0.1` from `ui/`, while the FastAPI development server runs at `http://localhost:8000`. Do not use the static server's default port 8000 because that is the API port. The PoC can keep the API URL as a fixed local constant in the page. The dev API must bind to loopback and allow only the local UI origins (`http://localhost:8080` and `http://127.0.0.1:8080`) through CORS. Library listing and ingestion require the operator bearer token; the page has one simple token field and keeps its value only in page memory, never embeds or fetches it from `.env`. The configured Navidrome credentials remain server-side.
+The page can be served separately with `python -m http.server 8080 --bind 127.0.0.1` from `ui/`, while the FastAPI development server runs at `http://localhost:8000`. The dev API binds to loopback and allows only the local UI origins (`http://localhost:8080` and `http://127.0.0.1:8080`) through CORS. Library listing and ingestion require the operator bearer token; the page keeps it in memory. Navidrome credentials remain server-side.
 
 The app also currently serves the same static directory at `/ui`; that same-origin path is an alternative for local use, but the PoC acceptance path is the user's separately served `ui/` directory.
 
@@ -345,8 +346,7 @@ and replacement behavior still require integration tests. Public sharing is opt-
       search form; results remain ranked and show artist/title, section, score, and lyric
       excerpt. Search and ingestion failures show actionable HTTP/API errors.
 - [x] A newly created collection remains visible even if it contains only the metadata
-      point; the page reports that no searchable tracks have been indexed yet. The current
-      UI filters out collections with one point, so this behavior must be explicitly fixed.
+      point; the page reports that no searchable tracks have been indexed yet.
 - [x] The documented local workflow uses FastAPI debug mode on port 8000 and
       `python -m http.server 8080 --bind 127.0.0.1` from `ui/`. The docs state that the
       debug API CORS setting is restricted to those local UI origins and required for
@@ -355,7 +355,7 @@ and replacement behavior still require integration tests. Public sharing is opt-
       that the synchronous endpoint has no progress display; a lost response can be
       retried against the same collection for unchanged/partial input.
 
-### Later Generation and Update Gates
+### Deferred Product Gates (Outside PRD-09)
 
 These apply when the corresponding follow-on scope is designed and implemented:
 
@@ -404,9 +404,8 @@ companion [PoC UI implementation plan](../plans/2026-10-25-prd09-search-ingest-p
 ### Deferred Scope
 
 - [ ] Design seed/theme generation, recording-level ranking, and evaluation separately.
-- [ ] Write a future UI PRD for preview, editing, evidence, and playlist save status;
-      Vue 3/TypeScript/Vite remains a possible later implementation.
-- [ ] Specify playlist updates/public sharing and a FastMCP adapter independently.
+- [x] Track assistant-facing UI and MCP direction separately in [PRD-12](12-assistant-user-experience.md).
+- [ ] Specify playlist updates/public sharing independently.
 - [ ] Design full refresh reconciliation for changed/deleted tracks and scheduling.
 - [ ] Define MCP caller identity to Navidrome account mapping before multi-user use.
 
@@ -477,3 +476,5 @@ browser version and its displayed private indicator remain unrecorded.
   private playlist creation are user-oriented MCP capabilities, with playback handled
   by a compatible client/tool. Recorded Navidrome auth options and the need to define
   caller-to-Navidrome identity mapping before multi-user access.
+- 2026-10-25: Closed PRD-09 at the completed single-account Navidrome backend and
+  local operator PoC boundary. Moved evolving assistant/UI/MCP product work to PRD-12.

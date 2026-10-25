@@ -182,8 +182,8 @@ local M3U endpoint and raw-LRC inspection command have been removed.
 Navidrome does not act as a general OIDC identity provider. Its external-auth mode
 delegates login to a trusted reverse proxy/auth provider; its optional experimental
 Jellyfin-compatible API has a client login endpoint but is not an OIDC sign-in flow.
-See [PRD-09](docs/prds/09-navidrome-semantic-playlists.md#authentication-direction)
-before designing multi-user login or account mapping.
+See [PRD-12](docs/prds/12-assistant-user-experience.md) for the current login and
+account-mapping questions.
 
 ### Local Search and Ingestion PoC
 
