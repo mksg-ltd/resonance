@@ -68,7 +68,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if settings.debug:
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],
+            allow_origins=["http://localhost:8080", "http://127.0.0.1:8080"],
             allow_methods=["*"],
             allow_headers=["*"],
         )
@@ -111,7 +111,7 @@ def dev() -> None:
     uvicorn.run(
         "resonance.app:create_app",
         factory=True,
-        host="0.0.0.0",  # noqa: S104
+        host="127.0.0.1",
         port=8000,
         reload=True,
         log_level="info",

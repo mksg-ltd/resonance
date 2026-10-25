@@ -2,10 +2,11 @@
 
 from unittest.mock import MagicMock, patch
 
-
+import httpx
+import pytest
 from fastapi.testclient import TestClient
 
-from resonance.app import create_app
+from resonance.app import create_app, dev
 from resonance.config import Settings
 
 
@@ -40,10 +41,49 @@ def _make_test_client(debug: bool = True) -> tuple[TestClient, MagicMock, MagicM
     return TestClient(app), mock_qdrant, mock_embedder
 
 
+class TestLocalDevelopmentAccess:
+    @pytest.mark.asyncio
+    async def test_debug_cors_allows_only_local_static_ui_origins(self):
+        app = create_app(settings=Settings(debug=True, _env_file=None))
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            for origin in ("http://localhost:8080", "http://127.0.0.1:8080"):
+                response = await client.options(
+                    "/api/search",
+                    headers={
+                        "Origin": origin,
+                        "Access-Control-Request-Method": "POST",
+                        "Access-Control-Request-Headers": "authorization,content-type",
+                    },
+                )
+                assert response.status_code == 200
+                assert response.headers["access-control-allow-origin"] == origin
+
+            blocked = await client.options(
+                "/api/search",
+                headers={
+                    "Origin": "http://example.com",
+                    "Access-Control-Request-Method": "POST",
+                    "Access-Control-Request-Headers": "authorization,content-type",
+                },
+            )
+            assert blocked.status_code == 400
+            assert "access-control-allow-origin" not in blocked.headers
+
+    def test_debug_runner_binds_to_loopback(self, monkeypatch):
+        monkeypatch.setenv("RESONANCE__DEBUG", "false")
+        monkeypatch.setenv("RESONANCE__SERVE_DOCS", "false")
+        with patch("resonance.app.uvicorn.run") as run:
+            dev()
+
+        assert run.call_args.kwargs["host"] == "127.0.0.1"
+
+
 class TestIngestRoute:
     def _native(self):
         from qdrant_client import QdrantClient
-        from tests.test_indexing import FixtureSource, FixtureEmbedder
+
+        from tests.test_indexing import FixtureEmbedder, FixtureSource
 
         source, embedder = FixtureSource(), FixtureEmbedder()
         settings = Settings(api_token="operator-token", navidrome=source.config, _env_file=None)

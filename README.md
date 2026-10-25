@@ -4,10 +4,15 @@ Search the meaning of lyrics in your Navidrome library. Resonance retrieves trac
 metadata and synced lyrics through Navidrome APIs, chunks and embeds the lyrics,
 and stores searchable sections in Qdrant. No music bind mount is required.
 
-The shared Python application interface serves the CLI and FastAPI. The current
-backend work adds library-native ingestion/search and verified private playlist
-creation; automatic seed/theme generation, a Vue frontend, MCP, and scheduled
-library refresh are separate follow-ons.
+The shared Python application interface serves the CLI and FastAPI, with a future
+FastMCP adapter planned over the same operations. Ingestion and library/model setup
+are administrative tasks. The user-facing goal is assistant-led lyric search and
+private playlist creation through MCP, using context the user chooses to share with
+their LLM. Playback remains the job of a compatible music client or playback tool.
+
+The current single-account HTML page is an operator PoC for ingestion and search,
+not the final user UI. It has no user login or multi-user authorization. Automatic
+seed/theme generation, an MCP adapter, and a production UI are follow-on work.
 
 ## Setup
 
@@ -158,11 +163,56 @@ All `/api/navidrome/...` paths and native ingestion require `Authorization: Bear
 ```
 
 Unknown fields, including obsolete mounted-directory inputs, are rejected. The
-static debug search page remains at `/ui`; the full frontend is separate work.
+debug server also serves the page at `/ui`; the local Python-server flow below is
+the current PoC workflow. A full frontend is separate work.
 `/api/navidrome/playlists` is the supported playlist creation path. The former
 local M3U endpoint and raw-LRC inspection command have been removed.
 
 ## Development
+
+### Product boundary
+
+- **Admin:** configure Navidrome/embedding services, select libraries, create Qdrant
+  collections, ingest, and eventually refresh them.
+- **User:** search for tracks related to a theme or conversational context, review
+  evidence/candidates, and explicitly create a private Navidrome playlist.
+- **Playback:** a Navidrome-compatible client or separate playback integration plays
+  the resulting playlist. Resonance does not stream audio.
+
+Navidrome does not act as a general OIDC identity provider. Its external-auth mode
+delegates login to a trusted reverse proxy/auth provider; its optional experimental
+Jellyfin-compatible API has a client login endpoint but is not an OIDC sign-in flow.
+See [PRD-09](docs/prds/09-navidrome-semantic-playlists.md#authentication-direction)
+before designing multi-user login or account mapping.
+
+### Local Search and Ingestion PoC
+
+In one terminal, start the local dependencies and debug API:
+
+```bash
+make run
+```
+
+`make run` binds the development API to loopback at `http://localhost:8000`. In a
+second terminal, serve the static page from the `ui/` directory on a different port:
+
+```bash
+cd ui
+python -m http.server 8080 --bind 127.0.0.1
+```
+
+Open `http://localhost:8080`, enter `RESONANCE__API_TOKEN` from your local `.env`,
+and load the available Navidrome libraries. The token stays in the page's memory and
+is sent only to protected library-listing and ingestion requests. The debug API allows
+the two local page origins on port 8080 for CORS; its dev server listens only on
+loopback. Do not expose this PoC setup to a network.
+
+The ingestion form defaults to 10 tracks. Clear the limit only when you intend to
+process the whole selected library; the request is synchronous and has no progress
+updates. If the browser loses its response, the run may have completed. Retrying the
+same compatible collection skips unchanged tracks and resumes identical partial writes.
+This operation adds newly visible songs but does not replace changed lyrics or remove
+deleted songs. The UI does not reset or delete collections.
 
 ```bash
 make test
