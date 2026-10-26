@@ -344,13 +344,16 @@ and replacement behavior still require integration tests. Public sharing is opt-
       `python -m http.server 8080 --bind 127.0.0.1` from `ui/`. The docs state that the
       debug API CORS setting is restricted to those local UI origins and required for
       this separate-origin setup.
-- [x] Full-library mode is clearly identified, confirms before submission, and explains
-      that the synchronous endpoint has no progress display; a lost response can be
-      retried against the same collection for unchanged/partial input.
+- [x] Full-library mode is clearly identified and confirms before submission. The Vue
+      workflow now reports aggregate progress and supports cooperative stop/explicit
+      resume; job status is process-local and Qdrant retains completed writes.
 
 ### Deferred Product Gates (Outside PRD-09)
 
 These apply when the corresponding follow-on scope is designed and implemented:
+
+- [ ] Durable job history/recovery and changed/deleted-track refresh remain follow-on
+      work; see [PRD-15](15-admin-ingestion-jobs.md) for the process-local job lifecycle.
 
 - [ ] Unit tests cover prompt/seed ambiguity, missing lyrics, explicit seed inclusion,
       model compatibility, ranking components, repeated-section overfetch, distinct

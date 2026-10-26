@@ -15,6 +15,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 from starlette.types import Scope
 
+from resonance.application.ingest_jobs import IngestJobManager
 from resonance.auth import AuthRuntime
 from resonance.config import Settings
 from resonance.embedders import close_embedders
@@ -53,11 +54,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         api_key=settings.qdrant.api_key.get_secret_value() if settings.qdrant.api_key else None,
     )
     app.state.qdrant = qdrant
+    ingest_jobs = IngestJobManager(qdrant, settings)
+    app.state.ingest_jobs = ingest_jobs
 
     try:
         yield
     finally:
         app.state.auth_runtime.sessions.clear()
+        ingest_jobs.close()
         qdrant.close()
         close_embedders()
 

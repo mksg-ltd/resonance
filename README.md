@@ -167,6 +167,9 @@ General playlist update/delete and automatic uncertain-outcome repair are deferr
 | GET    | `/api/embedding-profiles`                                       | Admin-only supported profile catalog            |
 | POST   | `/api/search`                                                   | Search an authorized collection                 |
 | POST   | `/api/ingest`                                                   | Admin-only native library ingestion             |
+| POST   | `/api/ingest-jobs`                                              | Admin-only background ingestion start           |
+| GET    | `/api/ingest-jobs`, `/api/ingest-jobs/<id>`                     | Admin-only current-process job status           |
+| POST   | `/api/ingest-jobs/<id>/stop`, `/resume`                         | Admin-only cooperative stop and explicit resume |
 | GET    | `/api/navidrome/connection`, `/libraries`, `/tracks`, `/lyrics` | Authenticated source inspection                 |
 | POST   | `/api/navidrome/playlists`                                      | Authenticated private playlist save             |
 | GET    | `/api/navidrome/operations/<operation_id>?library_id=2`         | Authenticated save status/reconciliation        |
@@ -231,17 +234,18 @@ not be exposed to a network.
 Administrators also see a collection setup card. Choose one of the account's accessible
 Navidrome libraries and a supported embedding profile, then start ingestion. The initial
 track limit defaults to 10 so the collection can be sampled before a full run. Leave the
-limit blank to ingest the full library; this request is synchronous and currently has no
-progress display or cancellation. An optional collection name is a Qdrant name, and a
+limit blank to ingest the full library. The Vue UI shows observed counters and supports
+cooperative stop and explicit resume. Navidrome does not provide a reliable total, so the
+UI does not display a percentage. An optional collection name is a Qdrant name, and a
 new collection is created as part of ingestion. The API rejects reuse when its stored
 library or embedding/index settings are incompatible. Embedding endpoint URLs and keys
 remain environment configuration; the profile catalog exposes only model metadata.
 
-The Vue admin form and legacy `/ui` ingestion form default to 10 tracks. Clear the limit
-only when you intend to process the whole selected library; the request is synchronous
-and has no progress updates. If the browser loses its response, the run may have
-completed. Retrying the same compatible collection skips unchanged tracks and resumes
-identical partial writes.
+The Vue admin form defaults to 10 tracks. Clear the limit only when you intend to process
+the whole selected library. Stop waits for the current external call and Qdrant batch to
+finish. Job status is in memory and is lost on service restart; the same collection can
+be submitted again, and Qdrant state skips unchanged tracks and resumes identical partial
+writes. The synchronous `POST /api/ingest` remains available for CLI and direct API use.
 This operation adds newly visible songs but does not replace changed lyrics or remove
 deleted songs. The UI does not reset or delete collections.
 

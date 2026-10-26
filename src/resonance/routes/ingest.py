@@ -8,8 +8,11 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from resonance import embedders
 from resonance.application.ingest import run_ingest
+from resonance.application.ingest_jobs import IngestJobManager
+from resonance.auth import Principal, UserSession
+from resonance.errors import fail
 from resonance.navidrome import NavidromeClient
-from resonance.routes.auth import get_navidrome, require_admin
+from resonance.routes.auth import get_navidrome, get_user_session, require_admin
 
 router = APIRouter(prefix="/api")
 
@@ -47,3 +50,45 @@ def ingest(body: IngestRequest, request: Request, source: Annotated[NavidromeCli
         max_tracks=body.max_tracks,
     )
     return asdict(result)
+
+
+def _job_manager(request: Request) -> IngestJobManager:
+    manager = getattr(request.app.state, "ingest_jobs", None)
+    if manager is None:
+        fail("Ingestion jobs are unavailable", code="jobs_unavailable", status=503)
+    return manager
+
+
+@router.post("/ingest-jobs", status_code=202)
+def start_ingest_job(
+    body: IngestRequest,
+    request: Request,
+    principal: Annotated[Principal, Depends(require_admin)],
+    session: Annotated[UserSession, Depends(get_user_session)],
+) -> dict:
+    return _job_manager(request).start(principal.username, body.model_dump(), session)
+
+
+@router.get("/ingest-jobs")
+def list_ingest_jobs(request: Request, principal: Annotated[Principal, Depends(require_admin)]) -> dict:
+    return {"jobs": _job_manager(request).list(principal.username)}
+
+
+@router.get("/ingest-jobs/{job_id}")
+def get_ingest_job(job_id: str, request: Request, principal: Annotated[Principal, Depends(require_admin)]) -> dict:
+    return _job_manager(request).get(job_id, principal.username)
+
+
+@router.post("/ingest-jobs/{job_id}/stop")
+def stop_ingest_job(job_id: str, request: Request, principal: Annotated[Principal, Depends(require_admin)]) -> dict:
+    return _job_manager(request).stop(job_id, principal.username)
+
+
+@router.post("/ingest-jobs/{job_id}/resume", status_code=202)
+def resume_ingest_job(
+    job_id: str,
+    request: Request,
+    principal: Annotated[Principal, Depends(require_admin)],
+    session: Annotated[UserSession, Depends(get_user_session)],
+) -> dict:
+    return _job_manager(request).resume(job_id, principal.username, session)

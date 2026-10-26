@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 
 const PENDING_SAVE_PREFIX = "resonance:pending-playlist:v1:";
 
@@ -19,6 +19,9 @@ const adminBusy = ref(false);
 const adminError = ref("");
 const adminMessage = ref("");
 const adminMessageType = ref("info");
+const ingestJobs = ref([]);
+let ingestPoller;
+const activeIngestJob = computed(() => ingestJobs.value.find((job) => ["queued", "running", "stopping"].includes(job.state)) || null);
 
 const selectedCollectionName = ref("");
 const previousCollectionName = ref("");
@@ -98,8 +101,10 @@ function clearUserData() {
   saveMessage.value = "";
   duplicateNameNeedsAcknowledgement.value = false;
   embeddingProfiles.value = [];
+  ingestJobs.value = [];
   adminLibraryId.value = "";
   adminProfileId.value = "";
+  adminBusy.value = false;
   adminError.value = "";
   adminMessage.value = "";
   clearDiscovery();
@@ -146,9 +151,60 @@ async function loadAdminSetup() {
     if (!libraries.value.some((library) => library.id === adminLibraryId.value)) {
       adminLibraryId.value = libraries.value[0]?.id || "";
     }
+    await loadIngestJobs();
   } catch (reason) {
     adminError.value = reason.message;
   }
+}
+
+async function loadIngestJobs() {
+  if (!user.value?.is_admin) return;
+  try {
+    const result = await request("/api/ingest-jobs");
+    ingestJobs.value = result.jobs;
+    adminBusy.value = Boolean(activeIngestJob.value);
+    if (activeIngestJob.value) {
+      adminMessage.value = "Ingestion is running. Progress updates as safe work units finish.";
+      adminMessageType.value = "info";
+    }
+  } catch (reason) {
+    adminError.value = reason.message;
+  }
+}
+
+function formatJobProgress(job) {
+  const progress = job?.progress || {};
+  return `${progress.tracks_seen || 0} discovered · ${progress.tracks_processed || 0} processed · ${progress.tracks_unchanged || 0} unchanged · ${progress.skipped || 0} skipped · ${progress.sections_written || 0} sections · ${progress.missing_lyrics || 0} missing lyrics · ${progress.unsynced_lyrics || 0} unsynced`;
+}
+
+async function refreshIngestJob(jobId) {
+  const updated = await request(`/api/ingest-jobs/${encodeURIComponent(jobId)}`);
+  ingestJobs.value = [updated, ...ingestJobs.value.filter((job) => job.id !== updated.id)];
+  adminBusy.value = Boolean(activeIngestJob.value);
+  if (updated.state === "completed" && updated.result) {
+    const result = updated.result;
+    const completion = result.enumeration_complete ? "Library enumeration complete." : "Track limit reached.";
+    adminMessage.value = `Collection ${result.collection}: ${result.tracks_processed} processed, ${result.tracks_unchanged} unchanged, ${result.skipped} skipped, ${result.sections_written} sections written. ${completion}`;
+    adminMessageType.value = "success";
+    newCollectionName.value = "";
+    try {
+      await loadCollections();
+      if (collections.value.some((item) => item.name === result.collection)) {
+        selectedCollectionName.value = result.collection;
+        previousCollectionName.value = result.collection;
+      }
+    } catch (reason) {
+      adminMessage.value += ` The collection list could not refresh: ${reason.message}`;
+      adminMessageType.value = "info";
+    }
+  } else if (updated.state === "stopped") {
+    adminMessage.value = `Ingestion stopped safely. ${formatJobProgress(updated)}. Resume is available.`;
+    adminMessageType.value = "info";
+  } else if (updated.state === "failed") {
+    adminError.value = updated.error_message || "Ingestion failed.";
+    adminMessageType.value = "error";
+  }
+  return updated;
 }
 
 async function restorePendingSave(owner) {
@@ -248,16 +304,12 @@ async function createCollection() {
       adminError.value = "Track limit must be a positive whole number, or blank for the full library.";
       return;
     }
-  } else if (
-    !window.confirm(
-      `Ingest the full “${library.name || library.id}” library? This runs synchronously and has no progress or cancel control.`,
-    )
-  ) {
+  } else if (!window.confirm(`Ingest the full “${library.name || library.id}” library?`)) {
     return;
   }
 
   adminError.value = "";
-  adminMessage.value = "Ingestion is running. Larger libraries may take several minutes…";
+  adminMessage.value = "Starting ingestion…";
   adminMessageType.value = "info";
   adminBusy.value = true;
   const body = { library_id: library.id, profile: adminProfileId.value };
@@ -265,31 +317,43 @@ async function createCollection() {
   if (maxTracks) body.max_tracks = maxTracks;
 
   try {
-    const result = await request("/api/ingest", { method: "POST", body: JSON.stringify(body) });
-    const completion = result.enumeration_complete ? "Library enumeration complete." : "Track limit reached.";
-    adminMessage.value = `Collection ${result.collection}: ${result.tracks_processed} processed, ${result.tracks_unchanged} unchanged, ${result.skipped} skipped, ${result.sections_written} sections written. ${completion}`;
-    adminMessageType.value = "success";
-    newCollectionName.value = "";
     searchResults.value = [];
     hasSearched.value = false;
-    try {
-      await loadCollections();
-      if (collections.value.some((item) => item.name === result.collection)) {
-        selectedCollectionName.value = result.collection;
-        previousCollectionName.value = result.collection;
-      }
-    } catch (refreshError) {
-      adminMessage.value += ` Ingestion finished, but the collection list could not refresh: ${refreshError.message}`;
-      adminMessageType.value = "info";
-    }
+    const result = await request("/api/ingest-jobs", { method: "POST", body: JSON.stringify(body) });
+    ingestJobs.value = [result, ...ingestJobs.value];
+    adminMessage.value = "Ingestion started. Progress is updated when each safe work unit finishes.";
+    adminMessageType.value = "info";
+    await refreshIngestJob(result.id);
   } catch (reason) {
     adminError.value = reason.message;
-    adminMessage.value = reason.status
-      ? "Collection ingestion failed. Review the error; earlier track writes may be retained."
-      : "The ingestion result could not be confirmed. It may have completed partially; check the collection list before retrying.";
+    adminMessage.value = "Collection ingestion could not be started. Existing writes, if any, remain in the collection.";
     adminMessageType.value = "error";
-  } finally {
     adminBusy.value = false;
+  }
+}
+
+async function stopIngestJob() {
+  if (!activeIngestJob.value) return;
+  try {
+    await request(`/api/ingest-jobs/${encodeURIComponent(activeIngestJob.value.id)}/stop`, { method: "POST" });
+    adminMessage.value = "Stop requested. The current safe work unit will finish first…";
+    adminMessageType.value = "info";
+    await refreshIngestJob(activeIngestJob.value.id);
+  } catch (reason) {
+    adminError.value = reason.message;
+  }
+}
+
+async function resumeIngestJob(job) {
+  try {
+    const result = await request(`/api/ingest-jobs/${encodeURIComponent(job.id)}/resume`, { method: "POST" });
+    ingestJobs.value = [result, ...ingestJobs.value.filter((item) => item.id !== result.id)];
+    adminBusy.value = true;
+    adminError.value = "";
+    adminMessage.value = "Resuming the same ingestion request…";
+    adminMessageType.value = "info";
+  } catch (reason) {
+    adminError.value = reason.message;
   }
 }
 
@@ -574,7 +638,29 @@ onMounted(async () => {
   } catch {
     user.value = null;
   }
+  ingestPoller = window.setInterval(async () => {
+    if (!user.value?.is_admin) return;
+    try {
+      const result = await request("/api/ingest-jobs");
+      const previousJobs = new Map(ingestJobs.value.map((item) => [item.id, item]));
+      ingestJobs.value = result.jobs;
+      adminBusy.value = Boolean(activeIngestJob.value);
+      const job = activeIngestJob.value || result.jobs.find((item) => {
+        const previous = previousJobs.get(item.id);
+        return previous && ["queued", "running", "stopping"].includes(previous.state) && item.state !== previous.state;
+      });
+      if (job && ["queued", "running", "stopping"].includes(job.state)) {
+        await refreshIngestJob(job.id);
+      } else if (job?.state === "completed" || job?.state === "stopped" || job?.state === "failed") {
+        await refreshIngestJob(job.id);
+      }
+    } catch {
+      // Polling failures are transient; keep the last displayed state.
+    }
+  }, 2000);
 });
+
+onUnmounted(() => window.clearInterval(ingestPoller));
 </script>
 
 <template>
@@ -644,9 +730,21 @@ onMounted(async () => {
           <p v-if="adminError" class="error" role="alert">{{ adminError }}</p>
           <p v-if="adminMessage" class="admin-result" :class="`message-${adminMessageType}`" role="status">{{ adminMessage }}</p>
           <button class="primary search-button" :disabled="adminBusy || !libraries.length || !embeddingProfiles.length">
-            {{ adminBusy ? "Indexing…" : "Create collection and ingest" }}
+            {{ adminBusy ? "Ingestion in progress…" : "Create collection and ingest" }}
           </button>
         </form>
+        <div v-if="activeIngestJob" class="ingest-job" aria-live="polite">
+          <div class="job-heading"><strong>{{ activeIngestJob.state === "stopping" ? "Stopping safely…" : "Ingestion progress" }}</strong><span class="badge">{{ activeIngestJob.state }}</span></div>
+          <p class="muted">{{ formatJobProgress(activeIngestJob) }}</p>
+          <p class="muted">Discovered tracks are counted as Navidrome returns them; there is no reliable total for a percentage.</p>
+          <button v-if="activeIngestJob.state !== 'stopping'" class="quiet small-button" @click="stopIngestJob">Stop after current safe work unit</button>
+        </div>
+        <div v-for="job in ingestJobs.filter((item) => !['queued', 'running', 'stopping'].includes(item.state)).slice(0, 1)" :key="job.id" class="ingest-job" aria-live="polite">
+          <div class="job-heading"><strong>Last ingestion: {{ job.state }}</strong><span v-if="job.can_resume" class="badge">resumable</span></div>
+          <p class="muted">{{ formatJobProgress(job) }}</p>
+          <p v-if="job.error_message" class="error">{{ job.error_message }}</p>
+          <button v-if="job.can_resume" class="quiet small-button" :disabled="adminBusy" @click="resumeIngestJob(job)">Resume same request</button>
+        </div>
       </section>
 
       <section class="card search-card">

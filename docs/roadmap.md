@@ -10,10 +10,13 @@ release readiness.
 
 - [x] Admin Vue workflow to choose a Navidrome library and embedding profile, create a
       collection through ingestion, and make it available to search.
+- [x] Live aggregate progress and cooperative stop/resume implementation; operator
+      acceptance is still pending. See [PRD-15](prds/15-admin-ingestion-jobs.md).
 - [ ] Operator acceptance: create a bounded collection from the Vue UI, confirm it
       appears in the search collection list, and run a search against it.
-- [ ] Decide whether synchronous full-library ingestion without progress/cancel is an
-      acceptable v1 limit. Incremental refresh for changed/deleted tracks remains deferred.
+- [ ] Operator acceptance: observe a bounded ingestion run, stop at a safe point, resume
+      it, and confirm the resulting collection is searchable. Incremental refresh for
+      changed/deleted tracks remains deferred.
 - Implementation: [admin collection setup plan](plans/2026-10-26-admin-collection-creation.md)
   (merged to `main` in `cc34d69`).
 
