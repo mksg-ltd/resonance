@@ -47,6 +47,14 @@ input:focus { border-color: #c9f36a; box-shadow: 0 0 0 3px #c9f36a19; }
 .collection-copy strong { font-size: 13px; font-weight: 600; }
 .collection-copy span { color: #79869a; font-size: 11px; }
 .search-card form { gap: 16px; }
+.admin-card { border-color: #8ca9ff55; }
+.admin-form { gap: 14px; }
+.admin-form label > .muted { font-size: 11px; font-weight: 400; }
+.admin-profile-detail { margin: -7px 0 0; text-align: left; }
+.admin-result { margin: 0; padding: 12px 14px; border: 1px solid #ffffff18; border-radius: 8px; font-size: 12px; line-height: 1.55; }
+.admin-result.message-success { color: #d4f790; border-color: #c9f36a55; background: #c9f36a0a; }
+.admin-result.message-info { color: #b8caff; border-color: #8ca9ff55; background: #8ca9ff0a; }
+.admin-result.message-error { color: #ff9aa3; border-color: #ff8e9855; background: #ff8e980a; }
 select, textarea { width: 100%; color: #edf1f8; background: #0b1119; border: 1px solid #334152; border-radius: 8px; outline: none; }
 select { height: 44px; padding: 0 12px; }
 textarea { min-height: 88px; padding: 12px; line-height: 1.5; resize: vertical; }

@@ -5,7 +5,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request
 
 from resonance.auth import Principal
-from resonance.routes.auth import get_principal
+from resonance.embedding_profiles import embedding_profiles
+from resonance.routes.auth import get_principal, require_admin
 
 router = APIRouter(prefix="/api")
 
@@ -24,3 +25,23 @@ def get_config(request: Request, _principal: Annotated[Principal, Depends(get_pr
     }
     data["authentication_configured"] = bool(settings.navidrome.base_url)
     return data
+
+
+@router.get("/embedding-profiles")
+def list_embedding_profiles(
+    request: Request,
+    _admin: Annotated[Principal, Depends(require_admin)],
+) -> list[dict[str, str | int | bool | None]]:
+    """List supported, non-secret embedding profile metadata for admin setup."""
+    default_profile = request.app.state.settings.embedding.profile
+    return [
+        {
+            "id": profile_id,
+            "model_id": profile.model_id,
+            "dimensions": profile.dimensions,
+            "protocol": profile.protocol,
+            "revision": profile.revision,
+            "is_default": profile_id == default_profile,
+        }
+        for profile_id, profile in sorted(embedding_profiles().items())
+    ]

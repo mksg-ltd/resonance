@@ -10,6 +10,15 @@ const username = ref("");
 const password = ref("");
 const error = ref("");
 const busy = ref(false);
+const embeddingProfiles = ref([]);
+const adminLibraryId = ref("");
+const adminProfileId = ref("");
+const newCollectionName = ref("");
+const initialTrackLimit = ref("10");
+const adminBusy = ref(false);
+const adminError = ref("");
+const adminMessage = ref("");
+const adminMessageType = ref("info");
 
 const selectedCollectionName = ref("");
 const previousCollectionName = ref("");
@@ -38,6 +47,9 @@ const selectedCollection = computed(
 );
 const selectedLibrary = computed(
   () => libraries.value.find((library) => library.id === selectedCollection.value?.library_id) || null,
+);
+const selectedAdminProfile = computed(
+  () => embeddingProfiles.value.find((profile) => profile.id === adminProfileId.value) || null,
 );
 const canSave = computed(
   () =>
@@ -85,6 +97,11 @@ function clearUserData() {
   completedSave.value = null;
   saveMessage.value = "";
   duplicateNameNeedsAcknowledgement.value = false;
+  embeddingProfiles.value = [];
+  adminLibraryId.value = "";
+  adminProfileId.value = "";
+  adminError.value = "";
+  adminMessage.value = "";
   clearDiscovery();
 }
 
@@ -115,6 +132,23 @@ async function loadCollections() {
     selectedCollectionName.value = collections.value[0]?.name || "";
   }
   previousCollectionName.value = selectedCollectionName.value;
+}
+
+async function loadAdminSetup() {
+  if (!user.value?.is_admin) return;
+  adminError.value = "";
+  try {
+    embeddingProfiles.value = await request("/api/embedding-profiles");
+    const defaultProfile = embeddingProfiles.value.find((profile) => profile.is_default);
+    if (!embeddingProfiles.value.some((profile) => profile.id === adminProfileId.value)) {
+      adminProfileId.value = defaultProfile?.id || embeddingProfiles.value[0]?.id || "";
+    }
+    if (!libraries.value.some((library) => library.id === adminLibraryId.value)) {
+      adminLibraryId.value = libraries.value[0]?.id || "";
+    }
+  } catch (reason) {
+    adminError.value = reason.message;
+  }
 }
 
 async function restorePendingSave(owner) {
@@ -176,6 +210,7 @@ async function refresh() {
   user.value = { username: me.username, is_admin: me.is_admin };
   libraries.value = me.libraries;
   await loadCollections();
+  await loadAdminSetup();
   await restorePendingSave(me.username);
 }
 
@@ -192,11 +227,69 @@ async function login() {
     user.value = { username: me.username, is_admin: me.is_admin };
     libraries.value = me.libraries;
     await loadCollections();
+    await loadAdminSetup();
     await restorePendingSave(me.username);
   } catch (reason) {
     error.value = reason.message;
   } finally {
     busy.value = false;
+  }
+}
+
+async function createCollection() {
+  const library = libraries.value.find((item) => item.id === adminLibraryId.value);
+  if (!user.value?.is_admin || !library || !adminProfileId.value || adminBusy.value) return;
+
+  const limitText = String(initialTrackLimit.value ?? "").trim();
+  let maxTracks;
+  if (limitText) {
+    maxTracks = Number(limitText);
+    if (!Number.isInteger(maxTracks) || maxTracks < 1) {
+      adminError.value = "Track limit must be a positive whole number, or blank for the full library.";
+      return;
+    }
+  } else if (
+    !window.confirm(
+      `Ingest the full “${library.name || library.id}” library? This runs synchronously and has no progress or cancel control.`,
+    )
+  ) {
+    return;
+  }
+
+  adminError.value = "";
+  adminMessage.value = "Ingestion is running. Larger libraries may take several minutes…";
+  adminMessageType.value = "info";
+  adminBusy.value = true;
+  const body = { library_id: library.id, profile: adminProfileId.value };
+  if (newCollectionName.value.trim()) body.collection = newCollectionName.value.trim();
+  if (maxTracks) body.max_tracks = maxTracks;
+
+  try {
+    const result = await request("/api/ingest", { method: "POST", body: JSON.stringify(body) });
+    const completion = result.enumeration_complete ? "Library enumeration complete." : "Track limit reached.";
+    adminMessage.value = `Collection ${result.collection}: ${result.tracks_processed} processed, ${result.tracks_unchanged} unchanged, ${result.skipped} skipped, ${result.sections_written} sections written. ${completion}`;
+    adminMessageType.value = "success";
+    newCollectionName.value = "";
+    searchResults.value = [];
+    hasSearched.value = false;
+    try {
+      await loadCollections();
+      if (collections.value.some((item) => item.name === result.collection)) {
+        selectedCollectionName.value = result.collection;
+        previousCollectionName.value = result.collection;
+      }
+    } catch (refreshError) {
+      adminMessage.value += ` Ingestion finished, but the collection list could not refresh: ${refreshError.message}`;
+      adminMessageType.value = "info";
+    }
+  } catch (reason) {
+    adminError.value = reason.message;
+    adminMessage.value = reason.status
+      ? "Collection ingestion failed. Review the error; earlier track writes may be retained."
+      : "The ingestion result could not be confirmed. It may have completed partially; check the collection list before retrying.";
+    adminMessageType.value = "error";
+  } finally {
+    adminBusy.value = false;
   }
 }
 
@@ -512,7 +605,48 @@ onMounted(async () => {
           <p class="muted">Signed in as <strong>{{ user.username }}</strong><span v-if="user.is_admin" class="badge">Administrator</span></p>
           <p v-if="error" class="error" role="alert">{{ error }}</p>
         </div>
-        <button class="quiet" :disabled="busy || saveBusy" @click="logout">Sign out</button>
+        <button class="quiet" :disabled="busy || saveBusy || adminBusy" @click="logout">Sign out</button>
+      </section>
+
+      <section v-if="user.is_admin" class="card admin-card">
+        <div class="section-heading">
+          <div><p class="eyebrow accent">ADMINISTRATION</p><h2>Create a search collection</h2></div>
+          <span class="badge">Administrator</span>
+        </div>
+        <p class="muted">Index a Navidrome library with an embedding profile. Collection creation and ingestion happen together.</p>
+        <form class="admin-form" @submit.prevent="createCollection">
+          <label>Navidrome library
+            <select v-model="adminLibraryId" :disabled="adminBusy || !libraries.length" required>
+              <option disabled value="">Choose a library</option>
+              <option v-for="library in libraries" :key="library.id" :value="library.id">
+                {{ library.name || library.id }}
+              </option>
+            </select>
+          </label>
+          <label>Embedding profile
+            <select v-model="adminProfileId" :disabled="adminBusy || !embeddingProfiles.length" required>
+              <option disabled value="">Choose an embedding profile</option>
+              <option v-for="profile in embeddingProfiles" :key="profile.id" :value="profile.id">
+                {{ profile.id }} · {{ profile.model_id }} · {{ profile.dimensions }} dimensions{{ profile.is_default ? " · default" : "" }}
+              </option>
+            </select>
+          </label>
+          <p v-if="selectedAdminProfile" class="fine admin-profile-detail">
+            {{ selectedAdminProfile.protocol }}<template v-if="selectedAdminProfile.revision"> · revision {{ selectedAdminProfile.revision }}</template>
+          </p>
+          <label>Collection name <span class="muted">Optional; leave blank to generate a name</span>
+            <input v-model="newCollectionName" maxlength="255" autocomplete="off" placeholder="e.g. library-model-experiment" :disabled="adminBusy" />
+          </label>
+          <label>Initial track limit <span class="muted">Defaults to 10; leave blank to ingest the full library</span>
+            <input v-model="initialTrackLimit" type="number" min="1" step="1" placeholder="10" :disabled="adminBusy" />
+          </label>
+          <p v-if="!libraries.length" class="muted">No Navidrome libraries are available to this account.</p>
+          <p v-if="adminError" class="error" role="alert">{{ adminError }}</p>
+          <p v-if="adminMessage" class="admin-result" :class="`message-${adminMessageType}`" role="status">{{ adminMessage }}</p>
+          <button class="primary search-button" :disabled="adminBusy || !libraries.length || !embeddingProfiles.length">
+            {{ adminBusy ? "Indexing…" : "Create collection and ingest" }}
+          </button>
+        </form>
       </section>
 
       <section class="card search-card">
@@ -522,7 +656,7 @@ onMounted(async () => {
         </div>
         <form @submit.prevent="search">
           <label>Collection
-            <select v-model="selectedCollectionName" :disabled="!collections.length || searchBusy || !!pendingSave" required @change="changeCollection">
+            <select v-model="selectedCollectionName" :disabled="!collections.length || searchBusy || adminBusy || !!pendingSave" required @change="changeCollection">
               <option disabled value="">Choose an indexed collection</option>
               <optgroup v-for="library in libraries" :key="library.id" :label="library.name || library.id">
                 <option v-for="collection in collectionsFor(library.id)" :key="collection.name" :value="collection.name">
@@ -532,11 +666,11 @@ onMounted(async () => {
             </select>
           </label>
           <label>Describe a mood, theme, or idea
-          <textarea v-model="query" rows="3" maxlength="1000" placeholder="Songs for starting over after a difficult year" required :disabled="!!pendingSave"></textarea>
+          <textarea v-model="query" rows="3" maxlength="1000" placeholder="Songs for starting over after a difficult year" required :disabled="adminBusy || !!pendingSave"></textarea>
           </label>
           <p v-if="!collections.length" class="muted">There are no indexed collections in your accessible libraries yet.</p>
           <p v-if="searchError" class="error" role="alert">{{ searchError }}</p>
-          <button class="primary search-button" :disabled="searchBusy || !selectedCollectionName || !!pendingSave">
+          <button class="primary search-button" :disabled="searchBusy || adminBusy || !selectedCollectionName || !!pendingSave">
             {{ searchBusy ? "Searching…" : "Search songs" }}
           </button>
         </form>

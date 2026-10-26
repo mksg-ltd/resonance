@@ -161,6 +161,7 @@ General playlist update/delete and automatic uncertain-outcome repair are deferr
 | POST   | `/api/auth/logout`                                              | Revoke current session                          |
 | GET    | `/health`                                                       | Public health status                            |
 | GET    | `/api/config`, `/api/collections`                               | Authenticated configuration and visible indexes |
+| GET    | `/api/embedding-profiles`                                       | Admin-only supported profile catalog            |
 | POST   | `/api/search`                                                   | Search an authorized collection                 |
 | POST   | `/api/ingest`                                                   | Admin-only native library ingestion             |
 | GET    | `/api/navidrome/connection`, `/libraries`, `/tracks`, `/lyrics` | Authenticated source inspection                 |
@@ -184,8 +185,8 @@ additionally require the configured admin username. The ingest request body is:
 ```
 
 Unknown fields, including obsolete mounted-directory inputs, are rejected. The
-debug server also serves the page at `/ui`; the local Python-server flow below is
-the current PoC workflow. A full frontend is separate work.
+debug server also serves the page at `/ui`; it remains an operator PoC. The Vue app
+provides admin collection creation and user search/playlist workflows.
 `/api/navidrome/playlists` is the supported playlist creation path. The former
 local M3U endpoint and raw-LRC inspection command have been removed.
 
@@ -200,11 +201,11 @@ local M3U endpoint and raw-LRC inspection command have been removed.
 - **Playback:** a Navidrome-compatible client or separate playback integration plays
   the resulting playlist. Resonance does not stream audio.
 
-The planned login uses each user's Navidrome credentials through the standard
+Login validates each user's Navidrome credentials through the standard
 Subsonic-compatible API. Resonance issues its own JWT for API calls. See
 [PRD-12](docs/prds/12-auth-foundation.md) for the design and remaining session details.
 
-### Local Search and Ingestion PoC
+### Local Vue UI: Collection Setup, Search, and Playlists
 
 Start the local dependencies and API, then run the Vue development server:
 
@@ -224,10 +225,20 @@ a replacement save unless you have checked for the playlist. The `/ui` operator 
 is also same-origin through FastAPI. Debug HTTP is for local development only and must
 not be exposed to a network.
 
-The ingestion form defaults to 10 tracks. Clear the limit only when you intend to
-process the whole selected library; the request is synchronous and has no progress
-updates. If the browser loses its response, the run may have completed. Retrying the
-same compatible collection skips unchanged tracks and resumes identical partial writes.
+Administrators also see a collection setup card. Choose one of the account's accessible
+Navidrome libraries and a supported embedding profile, then start ingestion. The initial
+track limit defaults to 10 so the collection can be sampled before a full run. Leave the
+limit blank to ingest the full library; this request is synchronous and currently has no
+progress display or cancellation. An optional collection name is a Qdrant name, and a
+new collection is created as part of ingestion. The API rejects reuse when its stored
+library or embedding/index settings are incompatible. Embedding endpoint URLs and keys
+remain environment configuration; the profile catalog exposes only model metadata.
+
+The Vue admin form and legacy `/ui` ingestion form default to 10 tracks. Clear the limit
+only when you intend to process the whole selected library; the request is synchronous
+and has no progress updates. If the browser loses its response, the run may have
+completed. Retrying the same compatible collection skips unchanged tracks and resumes
+identical partial writes.
 This operation adds newly visible songs but does not replace changed lyrics or remove
 deleted songs. The UI does not reset or delete collections.
 
