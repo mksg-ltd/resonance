@@ -31,7 +31,8 @@ run: up ## Start Qdrant + dev server (Swagger UI at /docs)
 	uv run resonance-dev
 
 ui: ## Start the Vue/Vite development server at http://127.0.0.1:5173
-	cd vue-ui && pnpm dev
+	@test -x vue-ui/node_modules/.bin/vite || { printf "Install frontend dependencies first: pnpm --dir vue-ui install\n"; exit 1; }
+	cd vue-ui && ./node_modules/.bin/vite --host 127.0.0.1
 
 prod: ## Start full stack (Qdrant + resonance + TEI)
 	@printf "$(BLUE)Starting production stack...$(RESET)\n"

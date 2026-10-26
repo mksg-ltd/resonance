@@ -12,8 +12,10 @@ an assistant can do the same using context the user chooses to share. Playback r
 the job of a compatible music client or playback tool.
 
 The Vue scaffold provides Navidrome login and authorized-library/collection discovery.
-The `/ui` HTML page remains an operator PoC for ingestion and search. Broader search,
-playlist authoring, and MCP tools are planned in [PRD-13](docs/prds/13-assistant-user-experience.md).
+The Vue app supports authenticated semantic search, candidate review, and private
+playlist creation. The `/ui` HTML page remains an operator PoC for ingestion and search.
+FastMCP tools and MCP authentication are the next stages in
+[PRD-13](docs/prds/13-assistant-user-experience.md).
 
 ## Setup
 
@@ -67,9 +69,8 @@ make ui       # Vue/Vite dev server on :5173 (run in a second terminal)
 # Or: make prod starts the complete Compose stack explicitly.
 ```
 
-For the Vue scaffold, start `make run` first, then run `make ui` in another
-terminal and open <http://127.0.0.1:5173>. The Vite server proxies API requests to
-FastAPI on port 8000. Install frontend dependencies once with
+For the Vue app, start `make run` first, then run `make ui` in another terminal and
+open <http://127.0.0.1:5173>. The Vite server proxies API requests to FastAPI on port 8000. Install the pinned pnpm 9.15.4 frontend dependencies once with
 `pnpm --dir vue-ui install` if `vue-ui/node_modules` is not present.
 
 Qdrant uses port 6333; TEI uses 8085. `make down` stops dev dependencies. `make clean`
@@ -213,8 +214,14 @@ make ui
 ```
 
 The API binds to loopback at `http://localhost:8000`; Vite serves `http://127.0.0.1:5173`
-and proxies `/api`. Sign in with your Navidrome account. The `/ui` operator PoC is
-also same-origin through FastAPI. Debug HTTP is for local development only and must
+and proxies `/api`. Sign in with your Navidrome account, choose one of its indexed
+collections, and search by a mood or theme. Review the matched lyric excerpts, select
+and order tracks, name the playlist, and explicitly create it. Resonance verifies that
+the resulting playlist is private, owned by the signed-in Navidrome user, and contains
+the selected tracks in order. A save marked unresolved may have an unknown outcome:
+check the same operation status or inspect Navidrome before dismissing it; do not start
+a replacement save unless you have checked for the playlist. The `/ui` operator PoC
+is also same-origin through FastAPI. Debug HTTP is for local development only and must
 not be exposed to a network.
 
 The ingestion form defaults to 10 tracks. Clear the limit only when you intend to

@@ -1,16 +1,18 @@
 ---
 phase: discovery
-status: draft
+status: approved-for-implementation
 created: 2026-10-25
-updated: 2026-10-25
+updated: 2026-10-26
 author: MK
 tags: [assistant, mcp, vue, api, playlists, navidrome]
 ---
 
 # User Search and Playlist Experience: Vue UI and MCP
 
-**Status**: Early draft — direct Vue experience and MCP use case recorded; workflows,
-API contracts, and first-release scope remain open. Authentication is specified in
+**Status**: First increment selected — deliver the direct Vue search-to-private-playlist
+workflow using the authenticated APIs so the user can evaluate match quality. A minimal
+FastMCP scaffold based on the Nool and Obsidian MCP projects can follow before full MCP
+tools; per-user authentication remains a design requirement for those tools. Authentication is implemented in
 [PRD-12](12-auth-foundation.md).
 
 **Relationship to PRD-09**: PRD-09 is complete for the single-account Navidrome
@@ -59,13 +61,18 @@ client should spawn CLI subprocesses or duplicate product logic.
 
 ## Initial Direction
 
-- Build a Vue application for direct user search, result review, and private playlist
-  creation. Design it around the same theme/mood-to-playlist job an assistant can do.
-- Define FastAPI endpoints as the stable contract consumed by both the Vue app and
-  FastMCP. Provide structured inputs/results and preserve supporting lyric evidence.
-- Expose corresponding user-oriented MCP tools for search, candidate review, and
-  private playlist creation. The LLM may interpret conversational context, then call
-  these tools with explicit structured arguments.
+- First ship the direct Vue journey: search by a theme or mood, review lyric-grounded
+  results, select and order tracks, and explicitly save a private playlist.
+- Reuse the authenticated FastAPI APIs as the product contract. Search and playlist
+  operations already exist; extend them only if the browser workflow exposes a
+  concrete contract gap.
+- Add a minimal FastMCP scaffold as an intermediate step after browser search and
+  playlist quality are validated. Use the existing Nool and Obsidian MCP projects as
+  implementation references, but adapt their authentication to Resonance's
+  Navidrome-verified user identity.
+- Add corresponding user-oriented FastMCP tools over the same API contracts after
+  defining how MCP clients obtain, store, and renew each user's bearer identity. Do
+  not pass Navidrome passwords through model-visible tool arguments.
 - Keep library ingestion and embedding configuration as operator/admin tasks. The
   current static HTML page remains an operator PoC, not the intended end-user UI.
 - Support multiple users on one self-hosted Navidrome server, each with the libraries
@@ -100,8 +107,10 @@ client should spawn CLI subprocesses or duplicate product logic.
 4. After clear user intent, the LLM calls the playlist tool with the approved ordered
    song IDs. The tool returns the verified playlist identity for playback elsewhere.
 
-These flows are hypotheses to refine through use. Exact layouts, endpoint schemas,
-tool names, approval UX, and playlist handoff are not fixed requirements yet.
+The first direct Vue workflow is fixed for this increment. Exact layout remains open
+to implementation judgment. The assistant flow, MCP tool names, and MCP login/token
+lifecycle remain follow-on design work. A thin FastMCP application scaffold is the
+planned bridge after this workflow is tested and before the MCP tools are implemented.
 
 ## Non-Goals for the First User-Facing Slice
 
@@ -112,15 +121,16 @@ tool names, approval UX, and playlist handoff are not fixed requirements yet.
 - Multi-account tenancy, shared/public playlists, social features, or broad role systems.
 - Requiring a specific MCP transport or an external identity provider before validating
   the basic search-to-playlist flow.
+- Implementing the FastMCP server or MCP authentication/token lifecycle in the first
+  direct Vue increment.
 
 ## Open Questions
 
-- Which direct Vue journey should be implemented first, and what minimum setup/admin
-  controls belong in that application?
+- What minimum setup/admin controls belong in a later Vue increment?
 - Which FastAPI endpoints should form the shared Vue/FastMCP contract, and where should
   search and playlist operations be separate versus composed?
-- How should FastMCP receive the authenticated Resonance user context while preserving
-  the same library-scoped API behavior as Vue?
+- How should FastMCP obtain and renew the authenticated Resonance user context without
+  exposing Navidrome credentials to the model or relying on a permanent token?
 - Which result fields and lyric excerpt limits give both the Vue user and an LLM enough
   grounding while minimizing unnecessary lyric disclosure?
 - Does playlist creation need a separate confirmation call, or is an explicit create
@@ -130,12 +140,14 @@ tool names, approval UX, and playlist handoff are not fixed requirements yet.
 
 ## Readiness
 
-This PRD is intentionally exploratory and not approved for implementation. Resolve the
-first Vue user flow, shared FastAPI contract, MCP user context, and playlist ownership
-contract before writing an implementation plan. Authentication is a prerequisite
-tracked in PRD-12.
-Ingestion progress, stop, restart, and full per-library refresh are separate
-administrative work and may receive their own PRD after prioritization.
+The first direct Vue slice is ready for implementation: the API contract,
+authentication prerequisite, playlist ownership policy, and user flow are established.
+After match quality is evaluated, add a minimal FastMCP scaffold using Nool and
+Obsidian MCP as references, then resolve user token lifecycle before building tools.
+The requested `~/dev/mksg/obsidian-mcp` path is not present in this checkout; the
+related repository was found at `~/dev/mk/obsidian-mcp`. Ingestion progress, stop,
+restart, and full per-library refresh are separate administrative work and may receive
+their own PRD after prioritization.
 
 ## References
 
