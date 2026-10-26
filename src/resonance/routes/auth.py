@@ -63,7 +63,7 @@ def _request_host(request: Request) -> str:
     return (request.url.hostname or "").lower()
 
 
-def _check_transport(request: Request, *, require_origin: bool = False) -> None:
+def check_auth_transport(request: Request, *, require_origin: bool = False) -> None:
     origin = _origin(request)
     settings = request.app.state.settings
     host = _request_host(request)
@@ -118,7 +118,7 @@ def _validated_login(
     *,
     require_origin: bool,
 ) -> tuple[UserSession, list[dict[str, str]]]:
-    _check_transport(request, require_origin=require_origin)
+    check_auth_transport(request, require_origin=require_origin)
     runtime = _auth_runtime(request)
     source = _limiter_begin(runtime, request)
     try:
@@ -178,14 +178,13 @@ def _session_for_request(
     if not token:
         raise HTTPException(status_code=401, detail="Authentication required", headers={"WWW-Authenticate": "Bearer"})
     if bearer_token:
-        _check_transport(request)
+        check_auth_transport(request)
     else:
         check_origin = enforce_cookie_origin and request.method not in {"GET", "HEAD", "OPTIONS"}
-        _check_transport(request, require_origin=check_origin)
+        check_auth_transport(request, require_origin=check_origin)
     runtime = _auth_runtime(request)
-    claims = runtime.decode(token)
-    session = runtime.sessions.get(str(claims.get("sid"))) if claims else None
-    if session is None or session.username != claims.get("sub"):
+    session = runtime.session_for_token(token)
+    if session is None:
         raise HTTPException(status_code=401, detail="Authentication required", headers={"WWW-Authenticate": "Bearer"})
     return session, bearer_token is not None
 
@@ -236,7 +235,7 @@ def login(body: LoginRequest, request: Request, response: Response) -> dict:
 
 @router.post("/token")
 def token(body: LoginRequest, request: Request) -> dict:
-    _check_transport(request)
+    check_auth_transport(request)
     session, _libraries = _validated_login(request, body, require_origin=False)
     runtime = _auth_runtime(request)
     return {"access_token": runtime.issue(session), "token_type": "bearer", "expires_in": SESSION_TTL_SECONDS}
@@ -254,7 +253,7 @@ def me(
 
 @router.post("/logout", status_code=204)
 def logout(request: Request, response: Response, authorization: Annotated[str | None, Header()] = None) -> Response:
-    _check_transport(request)
+    check_auth_transport(request)
     cookie_token = request.cookies.get(COOKIE_NAME)
     token_value = None
     if authorization:
@@ -264,7 +263,7 @@ def logout(request: Request, response: Response, authorization: Annotated[str | 
         token_value = value.strip()
     else:
         if cookie_token:
-            _check_transport(request, require_origin=True)
+            check_auth_transport(request, require_origin=True)
         token_value = cookie_token
     if token_value:
         runtime = _auth_runtime(request)

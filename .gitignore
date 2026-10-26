@@ -1,4 +1,4 @@
-data/
+/data/
 qdrant_storage/
 .env
 config/conf.d/*.yaml

@@ -208,6 +208,16 @@ class AuthRuntime:
         else:
             return claims
 
+    def session_for_token(self, token: str) -> UserSession | None:
+        """Resolve a bearer to its active Navidrome session."""
+        claims = self.decode(token)
+        if claims is None:
+            return None
+        session = self.sessions.get(str(claims["sid"]))
+        if session is None or session.username != claims["sub"]:
+            return None
+        return session
+
     def principal(self, session: UserSession) -> Principal:
         return Principal(
             username=session.username,

@@ -1,0 +1,13 @@
+profiles:
+  vyakyarth:
+    model_id: krutrim-ai-labs/Vyakyarth
+    dimensions: 768
+    protocol: openai-compatible
+  openai:
+    model_id: text-embedding-3-large
+    dimensions: 3072
+    protocol: openai-compatible
+  ollama-nomic-text:
+    model_id: nomic-embed-text
+    dimensions: 768
+    protocol: ollama

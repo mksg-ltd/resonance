@@ -14,8 +14,8 @@ the job of a compatible music client or playback tool.
 The Vue scaffold provides Navidrome login and authorized-library/collection discovery.
 The Vue app supports authenticated semantic search, candidate review, and private
 playlist creation. The `/ui` HTML page remains an operator PoC for ingestion and search.
-FastMCP tools and MCP authentication are the next stages in
-[PRD-13](docs/prds/13-assistant-user-experience.md).
+The FastMCP protocol scaffold is available at `/mcp/`. User-facing MCP tools and any
+OAuth client onboarding are future work beyond [PRD-14](docs/prds/14-fastmcp-scaffold.md).
 
 ## Setup
 
@@ -230,6 +230,58 @@ updates. If the browser loses its response, the run may have completed. Retrying
 same compatible collection skips unchanged tracks and resumes identical partial writes.
 This operation adds newly visible songs but does not replace changed lyrics or remove
 deleted songs. The UI does not reset or delete collections.
+
+### FastMCP Scaffold
+
+The tool-free FastMCP Streamable HTTP endpoint is mounted in the FastAPI process at
+`/mcp/`; it uses the same Navidrome-backed bearer session as the API. Start the stack
+with `make run` for local development or `make prod` for Compose. The API's existing
+transport policy applies: loopback HTTP is allowed only in debug mode, and remote
+connections require HTTPS. The `/health` endpoint is shared with FastAPI.
+
+To exercise the empty tool list with a real Resonance token, issue one using
+`POST /api/auth/token` and run this short client script. It prompts for the Navidrome
+credentials without placing them in shell history or persisting the returned token.
+Use the local URL only on the same machine; set `API_BASE` to your trusted HTTPS URL for
+remote access.
+
+```python
+import asyncio
+from getpass import getpass
+
+import httpx
+from fastmcp import Client
+from fastmcp.client.transports import StreamableHttpTransport
+
+API_BASE = "http://127.0.0.1:8000"
+
+
+async def main():
+    username = input("Navidrome username: ")
+    password = getpass("Navidrome password: ")
+    async with httpx.AsyncClient() as api:
+        response = await api.post(
+            f"{API_BASE}/api/auth/token",
+            json={"username": username, "password": password},
+        )
+    response.raise_for_status()
+    token = response.json()["access_token"]
+
+    transport = StreamableHttpTransport(
+        url=f"{API_BASE}/mcp/",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    async with Client(transport) as client:
+        tools = await client.list_tools()
+        print(f"Authenticated. Registered tools: {len(tools)} (none in this scaffold).")
+
+
+asyncio.run(main())
+```
+
+MCP clients must support a manually configured bearer token for this scaffold. There
+are no MCP search or playlist tools yet; this increment validates the mounted FastMCP
+transport and shared authentication only.
 
 ```bash
 make test

@@ -6,17 +6,21 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from qdrant_client import QdrantClient
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 from starlette.types import Scope
 
 from resonance.auth import AuthRuntime
 from resonance.config import Settings
 from resonance.embedders import close_embedders
 from resonance.errors import ApplicationError
+from resonance.mcp.server import create_mcp_server
+from resonance.routes.auth import check_auth_transport
 from resonance.routes.auth import router as auth_router
 from resonance.routes.collections import router as collections_router
 from resonance.routes.config import router as config_router
@@ -66,6 +70,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     docs_url = "/docs" if settings.serve_docs else None
     redoc_url = "/redoc" if settings.serve_docs else None
 
+    auth_runtime = AuthRuntime(settings.admin_user)
+    mcp_http_app = create_mcp_server(auth_runtime).http_app(path="/", transport="streamable-http")
+
+    @asynccontextmanager
+    async def combined_lifespan(app: FastAPI) -> AsyncGenerator[None]:
+        async with lifespan(app), mcp_http_app.lifespan(mcp_http_app):
+            yield
+
     app = FastAPI(
         title="resonance",
         description="Semantic search over song lyrics",
@@ -73,10 +85,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url="/openapi.json" if settings.serve_docs else None,
         docs_url=docs_url,
         redoc_url=redoc_url,
-        lifespan=lifespan,
+        lifespan=combined_lifespan,
     )
     app.state.settings = settings
-    app.state.auth_runtime = AuthRuntime(settings.admin_user)
+    app.state.auth_runtime = auth_runtime
+
+    @app.middleware("http")
+    async def guard_mcp_transport(request: Request, call_next: RequestResponseEndpoint) -> Response:
+        if request.url.path == "/mcp" or request.url.path.startswith("/mcp/"):
+            try:
+                check_auth_transport(request)
+            except HTTPException as error:
+                return JSONResponse(
+                    status_code=error.status_code,
+                    content={"detail": error.detail},
+                    headers=error.headers,
+                )
+        return await call_next(request)
 
     @app.exception_handler(ApplicationError)
     async def application_error(_request: Request, error: ApplicationError) -> JSONResponse:
@@ -90,6 +115,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(config_router)
     app.include_router(collections_router)
     app.include_router(navidrome_router)
+    app.mount("/mcp", mcp_http_app, name="mcp")
 
     # Serve static UI files (if ui/ directory exists)
     ui_dir = Path(__file__).resolve().parent.parent.parent / "ui"
