@@ -11,6 +11,9 @@ direct lyric search and private playlist creation in Vue, with equivalent MCP to
 an assistant can do the same using context the user chooses to share. Playback remains
 the job of a compatible music client or playback tool.
 
+See the [v1 roadmap](docs/roadmap.md) for the current product gates and operator
+acceptance items.
+
 The Vue scaffold provides Navidrome login and authorized-library/collection discovery.
 The Vue app supports authenticated semantic search, candidate review, and private
 playlist creation. The `/ui` HTML page remains an operator PoC for ingestion and search.
