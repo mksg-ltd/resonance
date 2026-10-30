@@ -30,11 +30,15 @@ release readiness.
 
 ### 3. Open-source readiness
 
-- [ ] Review and turn [PRD-10](prds/10-public-positioning-open-source-readiness.md)
-      from a broad draft into a scoped readiness plan with explicit release decisions,
-      evidence, and owners.
-- [ ] Resolve the chosen release gates for license/dependency/content rights, trust
+- [x] Reconcile and scope [PRD-10](prds/10-public-positioning-open-source-readiness.md)
+      against the current Navidrome product and release-readiness needs.
+- [x] Select AGPL-3.0-only as the project license.
+- [x] Add the AGPL-3.0-only license text and align Python package metadata.
+- [ ] Complete the distribution inventory, notices, and release artifact review.
+- [ ] Resolve the remaining release gates for dependency/content rights, trust
       boundary, portable deployment, secret/log handling, and accurate capability claims.
+- [ ] Publish the self-hosting guide, contributor guide, and project history index;
+      verify they match a clean install and current service paths.
 - Do not label the project distribution-ready until the agreed gates have evidence.
 
 ## Playlist Visibility Follow-up

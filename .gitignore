@@ -1,5 +1,4 @@
 /data/
-qdrant_storage/
 .env
 config/conf.d/*.yaml
 config/config.yml
@@ -10,4 +9,3 @@ __pycache__/
 /vue-ui/.pnpm-store/
 /vue-ui/dist/
 /src/resonance/static/app/
-tei_cache/

@@ -101,4 +101,4 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("RESONANCE_ADMIN_USER", "RESONANCE__ADMIN_USER"),
     )
-    journal_path: Path = Path("data/playlist-operations.sqlite3")
+    journal_path: Path = Path("data/local/playlist-operations.sqlite3")

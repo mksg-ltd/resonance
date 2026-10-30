@@ -5,10 +5,15 @@ __pycache__
 .pytest_cache
 .ruff_cache
 htmlcov
-qdrant_storage
 data/
 tests/
 docs/
 memory/
+.env
+.aws/
+.agents/
+.codex/
+dist/
+**/node_modules/
 conf.d/*.yaml
 !conf.d/*.yaml.example

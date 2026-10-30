@@ -32,5 +32,5 @@ ENV FORWARDED_ALLOW_IPS=127.0.0.1
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
-USER appuser
+ENTRYPOINT ["python", "-m", "resonance.container_entrypoint"]
 CMD ["uvicorn", "resonance.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--no-access-log"]

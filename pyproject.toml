@@ -1,8 +1,9 @@
 [project]
 name = "resonance"
 version = "0.1.0"
-description = "Semantic search over song lyrics using Qdrant and OpenAI embeddings"
+description = "Self-hosted semantic discovery over song lyrics using embeddings and Qdrant"
 authors = [{ name = "MK", email = "mk@mk.sg" }]
+license = "AGPL-3.0-only"
 requires-python = ">=3.14"
 dependencies = [
     "fastapi>=0.115.0",

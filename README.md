@@ -1,24 +1,78 @@
-# resonance
+# Resonance
 
-Search the meaning of lyrics in your Navidrome library. Resonance retrieves track
-metadata and synced lyrics through Navidrome APIs, chunks and embeds the lyrics,
-and stores searchable sections in Qdrant. No music bind mount is required.
+Resonance is both a self-hosted semantic music discovery tool and a place to explore
+how lyric chunking, text embeddings, and vector search fit together. It retrieves
+track metadata and synced lyrics through Navidrome APIs, turns lyrics into searchable
+sections, embeds those sections, and stores them in Qdrant. No music bind mount is
+required.
 
-The shared Python application interface serves the CLI and FastAPI. FastAPI endpoints
-are the intended contract for both a future Vue application and FastMCP adapter.
-Ingestion and library/model setup are administrative tasks. The user-facing goal is
-direct lyric search and private playlist creation in Vue, with equivalent MCP tools so
-an assistant can do the same using context the user chooses to share. Playback remains
-the job of a compatible music client or playback tool.
+You can run it against your own Navidrome library, or follow the implementation to
+learn how choices such as section boundaries, embedding models, vector dimensions,
+and retrieval affect semantic search. Matches are candidates for a person to review;
+the system does not decide what a song is objectively about.
+
+The shared Python application layer serves the CLI and FastAPI. The Vue application
+consumes the FastAPI API at the same origin; FastMCP is an authenticated protocol
+scaffold with no user-facing tools yet. Ingestion and library/model setup are
+administrative tasks. Search, review, and private playlist creation are user-facing.
+Playback remains the job of a compatible music client or playback tool.
 
 See the [v1 roadmap](docs/roadmap.md) for the current product gates and operator
 acceptance items.
 
-The Vue scaffold provides Navidrome login and authorized-library/collection discovery.
-The Vue app supports authenticated semantic search, candidate review, and private
-playlist creation. The `/ui` HTML page remains an operator PoC for ingestion and search.
-The FastMCP protocol scaffold is available at `/mcp/`. User-facing MCP tools and any
-OAuth client onboarding are future work beyond [PRD-14](docs/prds/14-fastmcp-scaffold.md).
+The Vue app provides Navidrome login, authorized-library/collection discovery,
+authenticated semantic search, candidate review, and private playlist creation. The
+`/ui` HTML page remains an operator PoC for ingestion and search. The FastMCP protocol
+scaffold is available at `/mcp/`; user-facing MCP tools are future work.
+
+## Current Status
+
+The core Navidrome workflow and Vue user/admin flows are implemented, but Resonance is
+still in v1 preparation and is **not yet release-ready**. Remaining gates include
+operator acceptance of ingestion progress/stop/resume, real-library search-quality
+evaluation, user-facing MCP tool design and implementation, and open-source readiness.
+The project uses **AGPL-3.0-only**; see the [license text](LICENSE). The Python package
+metadata declares the same SPDX identifier. Distribution review and the other v1
+readiness gates remain outstanding. See the
+[GNU AGPLv3 text](https://www.gnu.org/licenses/agpl-3.0.en.html) for the selected
+license terms. The full source repository publishes curated operator/developer docs,
+PRDs, plans, and historical design records. Docker images package runtime code and
+assets, not those project documents. See
+[docs/README.md](docs/README.md) for product history and a guide to current versus
+historical documents.
+
+## Learning path: from lyrics to semantic search
+
+The indexing pipeline is intentionally readable as a sequence of steps:
+
+1. **Get source data.** Navidrome supplies stable song IDs, metadata, and structured
+   synced lyrics. See [`navidrome.py`](src/resonance/navidrome.py).
+2. **Choose useful text units.** Resonance prefers explicit lyric section tags such
+   as `[Verse]` or `[Chorus]`. If tags are absent, it groups timestamped lines and
+   splits at gaps of five seconds or more. Tiny groups are merged into a neighbor
+   unless they are the first group. These are practical starting rules, not universal
+   truths. See [`chunker.py`](src/resonance/chunker.py).
+3. **Embed each section.** A text embedding model maps each section to a vector. The
+   query is embedded using the same configured profile, so its vector can be compared
+   with the stored section vectors. Profiles declare a model ID, protocol, and vector
+   dimensions; the endpoint and credentials are configured separately. See the
+   [profile catalog](src/resonance/data/embedding_profiles.yaml) and
+   [`embedders/`](src/resonance/embedders/).
+4. **Index and retrieve.** Qdrant stores vectors with section text and song metadata.
+   Search uses cosine distance to find nearby sections, then returns track candidates
+   and lyric excerpts for a person to review. See
+   [`application/indexing.py`](src/resonance/application/indexing.py) and
+   [`application/search.py`](src/resonance/application/search.py).
+
+Changing chunk boundaries changes what a vector represents. Larger sections retain
+more context but can blur distinct ideas; smaller sections can be more precise but
+may lose context or split a thought. Different models and revisions also create
+different vector spaces, so a collection is bound to its profile and dimensionality.
+For experiments, create a separate collection and compare results on a small set of
+queries before indexing a whole library. The admin UI defaults to a 10-track sample.
+
+See [Installation and operation](docs/INSTALLATION.md) for a clean self-hosting guide,
+and the source files above for the implementation details.
 
 ## Setup
 
@@ -140,10 +194,22 @@ then verifies the returned exact ID, owner, name, explicit XML privacy, count an
 order. Upgrading Navidrome requires validating and updating this gate first.
 
 The SQLite journal records save requests/outcomes, not lyrics or file mappings.
-Its default path is `data/playlist-operations.sqlite3`; override with
-`RESONANCE__JOURNAL_PATH`. Compose uses a durable `playlist_state` volume at
-`/app/state`, writable by appuser. Preserve/back up this journal. Losing it also
-loses duplicate-save protection; routine `make clean` preserves it.
+Host-run commands default to `data/local/playlist-operations.sqlite3`; Compose stores
+it at `data/resonance/playlist-operations.sqlite3`. Override with
+`RESONANCE__JOURNAL_PATH`. Preserve/back up this journal. Losing it also loses
+duplicate-save protection; routine cleanup preserves it. On the first Compose startup
+after the bind-mount migration, the former `playlist_state` named-volume journal is
+copied into `data/resonance/`; keep the old volume until that migration is confirmed.
+
+Persistent service artifacts share the ignored `data/` directory:
+
+- `data/qdrant_storage/` — indexed sections and Qdrant collection state.
+- `data/tei_cache/` — downloaded local TEI model files.
+- `data/resonance/` — Compose playlist-operation journal.
+- `data/local/` — host-run playlist-operation journal.
+
+Back up `data/` before upgrades or experiments. `make prod` recreates containers and
+interrupts in-progress ingestion; wait for jobs to finish before running it.
 
 `verified` means exact server readback matched. A known-ID `unresolved` operation
 can reconcile via status. An unknown-ID `submitting`/`unresolved` outcome must be
@@ -162,7 +228,6 @@ General playlist update/delete and automatic uncertain-outcome repair are deferr
 | POST   | `/api/auth/token`                                               | Non-browser bearer token exchange               |
 | GET    | `/api/auth/me`                                                  | Current user and accessible libraries           |
 | POST   | `/api/auth/logout`                                              | Revoke current session                          |
-| GET    | `/health`                                                       | Public health status                            |
 | GET    | `/api/config`, `/api/collections`                               | Authenticated configuration and visible indexes |
 | GET    | `/api/embedding-profiles`                                       | Admin-only supported profile catalog            |
 | POST   | `/api/search`                                                   | Search an authorized collection                 |
