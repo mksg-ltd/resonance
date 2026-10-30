@@ -1,5 +1,6 @@
 """Single-process background jobs adapting the shared ingestion operation."""
 
+import logging
 import secrets
 import threading
 import time
@@ -19,6 +20,7 @@ from resonance.navidrome import NavidromeClient, NavidromeCredentials
 ACTIVE_STATES = {"queued", "running", "stopping"}
 RETRYABLE_ERRORS = {"dependency_unavailable", "navidrome_unavailable", "embedding_unavailable"}
 MAX_RETAINED_JOBS = 50
+logger = logging.getLogger("uvicorn.error.resonance.ingest_jobs")
 
 
 @dataclass
@@ -27,13 +29,15 @@ class _Job:
     owner: str
     request: dict[str, Any]
     state: str = "queued"
-    progress: dict[str, int] = field(default_factory=dict)
+    progress: dict[str, Any] = field(default_factory=dict)
     result: dict[str, Any] | None = None
     error_code: str | None = None
     error_message: str | None = None
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
     cancel: threading.Event = field(default_factory=threading.Event, repr=False)
+    last_logged_tracks: int = 0
+    last_progress_log: float = field(default_factory=time.monotonic)
 
 
 class IngestJobManager:
@@ -111,12 +115,24 @@ class IngestJobManager:
             job.state = "running"
             self._touch(job)
         source: NavidromeClient | None = None
+        stage = "Navidrome client setup"
+        profile_id = job.request["profile"] or self._settings.embedding.profile
         try:
             source = NavidromeClient(self._settings.navidrome, NavidromeCredentials(username, password))
-            profile_id = job.request["profile"] or self._settings.embedding.profile
+            stage = "embedding profile setup"
+            embedder = embedders.resolve_embedder(profile_id, self._settings.embedding)
+            stage = "library ingestion"
+            logger.info(
+                "Ingestion job started: id=%s library_id=%s profile=%s track_limit=%s custom_collection=%s",
+                job.id,
+                job.request["library_id"],
+                profile_id,
+                job.request.get("max_tracks") or "unlimited",
+                bool(job.request.get("collection")),
+            )
             result = run_ingest(
                 qdrant=self._qdrant,
-                embedder=embedders.resolve_embedder(profile_id, self._settings.embedding),
+                embedder=embedder,
                 settings=self._settings,
                 source=source,
                 library_id=job.request["library_id"],
@@ -131,9 +147,20 @@ class IngestJobManager:
             )
             self._finish_result(job, result)
         except ApplicationError as error:
-            self._finish_error(job, error.code)
-        except Exception:  # noqa: BLE001 -- never expose provider exception contents
-            self._finish_error(job, "dependency_unavailable")
+            self._finish_error(job, error.code, str(error), stage, error.diagnostic)
+        except Exception as error:  # noqa: BLE001 -- never expose provider exception contents
+            logger.warning(
+                "Ingestion job failed unexpectedly: id=%s stage=%s exception_type=%s",
+                job.id,
+                stage,
+                type(error).__name__,
+            )
+            self._finish_error(
+                job,
+                "dependency_unavailable",
+                "An unexpected ingestion error occurred. Check the Resonance container logs for its error type.",
+                stage,
+            )
         finally:
             if source is not None:
                 with suppress(Exception):
@@ -143,27 +170,95 @@ class IngestJobManager:
         with self._lock:
             job.progress = asdict(value)
             self._touch(job)
+            now = time.monotonic()
+            if value.tracks_seen - job.last_logged_tracks >= 100 or now - job.last_progress_log >= 30:
+                job.last_logged_tracks = value.tracks_seen
+                job.last_progress_log = now
+                logger.info(
+                    "Ingestion progress: id=%s collection=%s discovered=%d processed=%d unchanged=%d "
+                    "skipped=%d sections=%d missing_lyrics=%d unsynced_lyrics=%d invalid_lyrics=%d",
+                    job.id,
+                    value.collection,
+                    value.tracks_seen,
+                    value.tracks_processed,
+                    value.tracks_unchanged,
+                    value.skipped,
+                    value.sections_written,
+                    value.missing_lyrics,
+                    value.unsynced_lyrics,
+                    value.invalid_lyrics,
+                )
 
     def _finish_result(self, job: _Job, result: IngestResult) -> None:
         with self._lock:
             job.result = asdict(result)
             job.state = "stopped" if result.cancelled else "completed"
             self._touch(job)
+        logger.info(
+            "Ingestion job %s: id=%s collection=%s discovered=%d processed=%d unchanged=%d skipped=%d "
+            "sections=%d missing_lyrics=%d unsynced_lyrics=%d invalid_lyrics=%d",
+            job.state,
+            job.id,
+            result.collection,
+            result.tracks_seen,
+            result.tracks_processed,
+            result.tracks_unchanged,
+            result.skipped,
+            result.sections_written,
+            result.missing_lyrics,
+            result.unsynced_lyrics,
+            result.invalid_lyrics,
+        )
 
-    def _finish_error(self, job: _Job, code: str) -> None:
+    def _finish_error(self, job: _Job, code: str, message: str, stage: str, diagnostic: str | None = None) -> None:
         messages = {
             "refresh_required": "Track content changed; use a new collection until refresh is supported.",
             "collection_incompatible": "The selected collection is incompatible with this request.",
             "scope_mismatch": "The source returned a track outside the selected library.",
             "navidrome_unavailable": "Navidrome could not complete the ingestion request.",
             "embedding_unavailable": "The embedding service could not complete the request.",
+            "invalid_configuration": (
+                "Embedding profile or endpoint configuration is invalid; check the selected profile and served model."
+            ),
+            "invalid_embeddings": (
+                "The embedding service returned vectors with an unexpected count or dimension; "
+                "check the profile/model match."
+            ),
+            "index_unavailable": "Qdrant could not complete or verify an index operation.",
+            "index_incomplete": "Qdrant did not confirm that all sections were written for a track.",
+            "library_unavailable": "The selected Navidrome library is unavailable to this account.",
+            "navidrome_protocol": "Navidrome returned an invalid response during ingestion.",
+            "navidrome_rejected": "Navidrome rejected an ingestion request; check this account's library access.",
             "dependency_unavailable": "An ingestion dependency could not complete the request.",
         }
+        safe_message = messages.get(code, message)
         with self._lock:
             job.state = "failed"
             job.error_code = code
-            job.error_message = messages.get(code, "Ingestion failed. Review the request and collection state.")
+            job.error_message = safe_message
             self._touch(job)
+            progress = job.progress
+        logger.error(
+            "Ingestion job failed: id=%s stage=%s library_id=%s profile=%s collection=%s "
+            "code=%s diagnostic=%s discovered=%d processed=%d unchanged=%d skipped=%d sections=%d "
+            "missing_lyrics=%d unsynced_lyrics=%d invalid_lyrics=%d message=%s",
+            job.id,
+            stage,
+            job.request["library_id"],
+            job.request["profile"] or self._settings.embedding.profile,
+            progress.get("collection") or job.request.get("collection") or "generated",
+            code,
+            diagnostic or "none",
+            progress.get("tracks_seen", 0),
+            progress.get("tracks_processed", 0),
+            progress.get("tracks_unchanged", 0),
+            progress.get("skipped", 0),
+            progress.get("sections_written", 0),
+            progress.get("missing_lyrics", 0),
+            progress.get("unsynced_lyrics", 0),
+            progress.get("invalid_lyrics", 0),
+            safe_message,
+        )
 
     def _ensure_idle(self) -> None:
         if self._closing:

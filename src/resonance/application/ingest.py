@@ -1,5 +1,6 @@
 """Navidrome-to-Qdrant ingestion independent of HTTP and CLI transports."""
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -21,6 +22,15 @@ from resonance.embedders.base import EmbeddingProvider
 from resonance.errors import ApplicationError, external_errors, fail
 from resonance.navidrome import NavidromeClient
 
+logger = logging.getLogger("uvicorn.error.resonance.ingest")
+INVALID_LYRICS_DIAGNOSTICS = (
+    "lyrics_list_not_object",
+    "lyricsList.structuredLyrics:",
+    "structuredLyrics.offset:",
+    "structuredLyrics.line:",
+    "lyrics_line_value_invalid_or_timestamps_out_of_order",
+)
+
 
 @dataclass
 class IngestResult:
@@ -32,6 +42,7 @@ class IngestResult:
     skipped: int = 0
     missing_lyrics: int = 0
     unsynced_lyrics: int = 0
+    invalid_lyrics: int = 0
     enumeration_complete: bool = False
     cancelled: bool = False
 
@@ -40,6 +51,7 @@ class IngestResult:
 class IngestProgress:
     """Safe aggregate counters; deliberately excludes track metadata and identifiers."""
 
+    collection: str
     tracks_seen: int
     tracks_processed: int
     tracks_unchanged: int
@@ -47,6 +59,7 @@ class IngestProgress:
     skipped: int
     missing_lyrics: int
     unsynced_lyrics: int
+    invalid_lyrics: int
 
 
 @external_errors("Ingestion interrupted; completed writes are retained. Retry unchanged input to resume")
@@ -90,6 +103,7 @@ def run_ingest(  # noqa: PLR0913, PLR0915
         if progress is not None:
             progress(
                 IngestProgress(
+                    collection=result.collection,
                     tracks_seen=result.tracks_seen,
                     tracks_processed=result.tracks_processed,
                     tracks_unchanged=result.tracks_unchanged,
@@ -97,6 +111,7 @@ def run_ingest(  # noqa: PLR0913, PLR0915
                     skipped=result.skipped,
                     missing_lyrics=result.missing_lyrics,
                     unsynced_lyrics=result.unsynced_lyrics,
+                    invalid_lyrics=result.invalid_lyrics,
                 )
             )
 
@@ -110,7 +125,21 @@ def run_ingest(  # noqa: PLR0913, PLR0915
         result.tracks_seen += 1
         if discovered.source_id != metadata["source_id"] or discovered.library_id != library_id:
             fail("Source returned a track outside the selected scope", code="scope_mismatch", status=502)
-        track = source.lyrics(discovered)
+        try:
+            track = source.lyrics(discovered)
+        except ApplicationError as error:
+            diagnostic = error.diagnostic or ""
+            if error.code != "navidrome_protocol" or not diagnostic.startswith(INVALID_LYRICS_DIAGNOSTICS):
+                raise
+            result.skipped += 1
+            result.invalid_lyrics += 1
+            logger.warning(
+                "Skipping track with invalid Navidrome lyrics: position=%d diagnostic=%s",
+                result.tracks_seen,
+                diagnostic,
+            )
+            report()
+            continue
         if track.lyrics_status != "synced":
             result.skipped += 1
             result.missing_lyrics += track.lyrics_status in {"missing", "empty", "language_unavailable"}
@@ -151,7 +180,8 @@ def run_ingest(  # noqa: PLR0913, PLR0915
                 )
             except ApplicationError:
                 raise
-            except Exception:  # noqa: BLE001 -- don't expose provider request data in default errors
+            except Exception as error:  # noqa: BLE001 -- don't expose provider request data in default errors
+                logger.warning("Embedding call failed: exception_type=%s", type(error).__name__)
                 fail("Embedding request failed", code="embedding_unavailable", status=502)
             points = [
                 PointStruct(id=row["id"], vector=vector, payload=row["payload"])

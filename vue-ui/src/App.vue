@@ -10,6 +10,7 @@ const username = ref("");
 const password = ref("");
 const error = ref("");
 const busy = ref(false);
+const authReady = ref(false);
 const embeddingProfiles = ref([]);
 const adminLibraryId = ref("");
 const adminProfileId = ref("");
@@ -44,6 +45,8 @@ const saveMessageType = ref("info");
 const duplicateNameNeedsAcknowledgement = ref(false);
 
 const authenticated = computed(() => user.value !== null);
+const currentPath = ref(window.location.pathname);
+const isAdminPage = computed(() => currentPath.value.startsWith("/admin"));
 const collectionsFor = (libraryId) => collections.value.filter((collection) => collection.library_id === libraryId);
 const selectedCollection = computed(
   () => collections.value.find((collection) => collection.name === selectedCollectionName.value) || null,
@@ -76,6 +79,18 @@ const needsManualReview = computed(
 
 function pendingSaveKey(owner) {
   return `${PENDING_SAVE_PREFIX}${encodeURIComponent(owner)}`;
+}
+
+function navigate(path) {
+  if (path.startsWith("/admin") && !user.value?.is_admin) return;
+  window.history.pushState({}, "", path);
+  currentPath.value = window.location.pathname;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function syncPageFromLocation() {
+  currentPath.value = window.location.pathname;
+  if (isAdminPage.value && user.value && !user.value.is_admin) navigate("/");
 }
 
 function clearDiscovery() {
@@ -174,7 +189,7 @@ async function loadIngestJobs() {
 
 function formatJobProgress(job) {
   const progress = job?.progress || {};
-  return `${progress.tracks_seen || 0} discovered · ${progress.tracks_processed || 0} processed · ${progress.tracks_unchanged || 0} unchanged · ${progress.skipped || 0} skipped · ${progress.sections_written || 0} sections · ${progress.missing_lyrics || 0} missing lyrics · ${progress.unsynced_lyrics || 0} unsynced`;
+  return `${progress.tracks_seen || 0} discovered · ${progress.tracks_processed || 0} processed · ${progress.tracks_unchanged || 0} unchanged · ${progress.skipped || 0} skipped · ${progress.sections_written || 0} sections · ${progress.missing_lyrics || 0} missing lyrics · ${progress.unsynced_lyrics || 0} unsynced · ${progress.invalid_lyrics || 0} invalid lyrics`;
 }
 
 async function refreshIngestJob(jobId) {
@@ -184,8 +199,10 @@ async function refreshIngestJob(jobId) {
   if (updated.state === "completed" && updated.result) {
     const result = updated.result;
     const completion = result.enumeration_complete ? "Library enumeration complete." : "Track limit reached.";
-    adminMessage.value = `Collection ${result.collection}: ${result.tracks_processed} processed, ${result.tracks_unchanged} unchanged, ${result.skipped} skipped, ${result.sections_written} sections written. ${completion}`;
-    adminMessageType.value = "success";
+    const invalidLyrics = result.invalid_lyrics || 0;
+    const skippedWarning = invalidLyrics ? ` ${invalidLyrics} track(s) were skipped because their lyrics response was invalid.` : "";
+    adminMessage.value = `Collection ${result.collection}: ${result.tracks_processed} processed, ${result.tracks_unchanged} unchanged, ${result.skipped} skipped (${invalidLyrics} invalid lyrics), ${result.sections_written} sections written. ${completion}${skippedWarning}`;
+    adminMessageType.value = invalidLyrics ? "warning" : "success";
     newCollectionName.value = "";
     try {
       await loadCollections();
@@ -264,6 +281,7 @@ async function refresh() {
     error.value = "";
   }
   user.value = { username: me.username, is_admin: me.is_admin };
+  if (isAdminPage.value && !me.is_admin) navigate("/");
   libraries.value = me.libraries;
   await loadCollections();
   await loadAdminSetup();
@@ -281,6 +299,7 @@ async function login() {
     password.value = "";
     clearUserData();
     user.value = { username: me.username, is_admin: me.is_admin };
+    if (isAdminPage.value && !me.is_admin) navigate("/");
     libraries.value = me.libraries;
     await loadCollections();
     await loadAdminSetup();
@@ -362,6 +381,7 @@ async function logout() {
   try {
     await request("/api/auth/logout", { method: "POST" });
     clearUserData();
+    navigate("/app/");
     error.value = "";
   } catch (reason) {
     error.value = `Could not sign out: ${reason.message}`;
@@ -633,10 +653,13 @@ function dismissUnresolvedSave() {
 }
 
 onMounted(async () => {
+  window.addEventListener("popstate", syncPageFromLocation);
   try {
     await refresh();
   } catch {
     user.value = null;
+  } finally {
+    authReady.value = true;
   }
   ingestPoller = window.setInterval(async () => {
     if (!user.value?.is_admin) return;
@@ -660,17 +683,26 @@ onMounted(async () => {
   }, 2000);
 });
 
-onUnmounted(() => window.clearInterval(ingestPoller));
+onUnmounted(() => {
+  window.clearInterval(ingestPoller);
+  window.removeEventListener("popstate", syncPageFromLocation);
+});
 </script>
 
 <template>
   <main class="shell">
     <header class="topbar">
-      <a class="brand" href="/app/" aria-label="Resonance home"><span class="brand-mark">R</span> resonance</a>
+      <a class="brand" href="/" aria-label="Resonance home" @click.prevent="navigate('/')"><span class="brand-mark">R</span> resonance</a>
       <span class="eyebrow">PERSONAL MUSIC DISCOVERY</span>
     </header>
 
-    <section v-if="!authenticated" class="login card">
+    <section v-if="!authReady" class="login card" role="status">
+      <p class="eyebrow accent">RESTORING SESSION</p>
+      <h1>Loading Resonance</h1>
+      <p class="muted">Checking your Navidrome sign-in…</p>
+    </section>
+
+    <section v-else-if="!authenticated" class="login card">
       <p class="eyebrow accent">YOUR LIBRARY, YOUR ACCOUNT</p>
       <h1>Sign in to Resonance</h1>
       <p class="muted">Use your Navidrome account. Resonance only shows music your account can access.</p>
@@ -686,15 +718,20 @@ onUnmounted(() => window.clearInterval(ingestPoller));
     <template v-else>
       <section class="welcome">
         <div>
-          <p class="eyebrow accent">WELCOME BACK</p>
-          <h1>Find songs for the moment</h1>
+          <p class="eyebrow accent">{{ isAdminPage ? "ADMINISTRATION" : "WELCOME BACK" }}</p>
+          <h1>{{ isAdminPage ? "Collection setup" : "Find songs for the moment" }}</h1>
           <p class="muted">Signed in as <strong>{{ user.username }}</strong><span v-if="user.is_admin" class="badge">Administrator</span></p>
           <p v-if="error" class="error" role="alert">{{ error }}</p>
         </div>
-        <button class="quiet" :disabled="busy || saveBusy || adminBusy" @click="logout">Sign out</button>
+        <div class="header-actions">
+          <button v-if="user.is_admin" class="quiet" @click="navigate(isAdminPage ? '/' : '/admin')">{{ isAdminPage ? "Search" : "Admin" }}</button>
+          <button class="quiet" :disabled="busy || saveBusy" @click="logout">Sign out</button>
+        </div>
       </section>
 
-      <section v-if="user.is_admin" class="card admin-card">
+      <p v-if="user.is_admin && isAdminPage" class="muted admin-intro">Configure an indexed collection for libraries available to your Navidrome account.</p>
+
+      <section v-if="user.is_admin && isAdminPage" class="card admin-card">
         <div class="section-heading">
           <div><p class="eyebrow accent">ADMINISTRATION</p><h2>Create a search collection</h2></div>
           <span class="badge">Administrator</span>
@@ -747,14 +784,14 @@ onUnmounted(() => window.clearInterval(ingestPoller));
         </div>
       </section>
 
-      <section class="card search-card">
+      <section v-if="!isAdminPage" class="card search-card">
         <div class="section-heading">
           <div><p class="eyebrow accent">SEMANTIC SEARCH</p><h2>What do you want to hear?</h2></div>
           <span v-if="selectedLibrary" class="library-pill">{{ selectedLibrary.name || selectedLibrary.id }}</span>
         </div>
         <form @submit.prevent="search">
           <label>Collection
-            <select v-model="selectedCollectionName" :disabled="!collections.length || searchBusy || adminBusy || !!pendingSave" required @change="changeCollection">
+            <select v-model="selectedCollectionName" :disabled="!collections.length || searchBusy || !!pendingSave" required @change="changeCollection">
               <option disabled value="">Choose an indexed collection</option>
               <optgroup v-for="library in libraries" :key="library.id" :label="library.name || library.id">
                 <option v-for="collection in collectionsFor(library.id)" :key="collection.name" :value="collection.name">
@@ -764,17 +801,17 @@ onUnmounted(() => window.clearInterval(ingestPoller));
             </select>
           </label>
           <label>Describe a mood, theme, or idea
-          <textarea v-model="query" rows="3" maxlength="1000" placeholder="Songs for starting over after a difficult year" required :disabled="adminBusy || !!pendingSave"></textarea>
+          <textarea v-model="query" rows="3" maxlength="1000" placeholder="Songs for starting over after a difficult year" required :disabled="!!pendingSave"></textarea>
           </label>
           <p v-if="!collections.length" class="muted">There are no indexed collections in your accessible libraries yet.</p>
           <p v-if="searchError" class="error" role="alert">{{ searchError }}</p>
-          <button class="primary search-button" :disabled="searchBusy || adminBusy || !selectedCollectionName || !!pendingSave">
+          <button class="primary search-button" :disabled="searchBusy || !selectedCollectionName || !!pendingSave">
             {{ searchBusy ? "Searching…" : "Search songs" }}
           </button>
         </form>
       </section>
 
-      <section v-if="searchResults.length || searchBusy || hasSearched" class="card results-card">
+      <section v-if="!isAdminPage && (searchResults.length || searchBusy || hasSearched)" class="card results-card">
         <div class="section-heading">
           <div><p class="eyebrow accent">SEARCH RESULTS</p><h2>Review the matches</h2></div>
           <span class="count">{{ searchResults.length }}</span>
@@ -796,7 +833,7 @@ onUnmounted(() => window.clearInterval(ingestPoller));
         </article>
       </section>
 
-      <section v-if="selectedTracks.length || pendingSave" class="card playlist-card">
+      <section v-if="!isAdminPage && (selectedTracks.length || pendingSave)" class="card playlist-card">
         <div class="section-heading"><div><p class="eyebrow accent">YOUR SELECTION</p><h2>Build a playlist</h2></div><span class="count">{{ selectedTracks.length }}</span></div>
         <p class="muted">Arrange the tracks, name the playlist, then save it to Navidrome.</p>
         <ol v-if="selectedTracks.length" class="selected-list">
@@ -819,7 +856,7 @@ onUnmounted(() => window.clearInterval(ingestPoller));
 
       </section>
 
-      <section v-if="saveMessage" class="card save-message" :class="`message-${saveMessageType}`" role="status">
+      <section v-if="!isAdminPage && saveMessage" class="card save-message" :class="`message-${saveMessageType}`" role="status">
         <p>{{ saveMessage }}</p>
         <div v-if="completedSave" class="completed-save">
           <strong>{{ completedSave.name }}</strong>
@@ -833,14 +870,6 @@ onUnmounted(() => window.clearInterval(ingestPoller));
         </div>
       </section>
 
-      <section v-if="!searchResults.length && !selectedTracks.length && !hasSearched && collections.length" class="card library-card">
-        <div class="section-heading"><div><p class="eyebrow accent">YOUR LIBRARIES</p><h2>Available to you</h2></div><span class="count">{{ libraries.length }}</span></div>
-        <div v-for="library in libraries" :key="library.id" class="library-row">
-          <div class="library-icon">♫</div>
-          <div class="library-copy"><h3>{{ library.name || library.id }}</h3><p>{{ library.id }}</p></div>
-          <span class="muted">{{ collectionsFor(library.id).length }} collections</span>
-        </div>
-      </section>
       <footer>Resonance is a private discovery layer for your Navidrome library.</footer>
     </template>
   </main>

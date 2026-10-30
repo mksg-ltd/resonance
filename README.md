@@ -231,6 +231,10 @@ a replacement save unless you have checked for the playlist. The `/ui` operator 
 is also same-origin through FastAPI. Debug HTTP is for local development only and must
 not be exposed to a network.
 
+The Docker image serves the built Vue UI at `http://localhost:8000/`; FastAPI endpoints
+remain under `/api` (with health at `/health` and MCP at `/mcp`). The former `/app/`
+frontend URL redirects to the corresponding root-based page.
+
 Administrators also see a collection setup card. Choose one of the account's accessible
 Navidrome libraries and a supported embedding profile, then start ingestion. The initial
 track limit defaults to 10 so the collection can be sampled before a full run. Leave the

@@ -12,7 +12,7 @@ Semantic search engine for song lyrics. Users search by meaning/theme ("songs ab
 - **Config:** Bundled embedding profile YAML + pydantic-settings environment settings
 - **Vector DB:** Qdrant (Docker)
 - **Embeddings:** TEI through its OpenAI-compatible API; explicit OpenAI/Ollama configurations also supported
-- **Web UI:** Vue 3/Vite scaffold built into the Python image at `/app/`; operator PoC at `/ui`
+- **Web UI:** Vue 3/Vite scaffold built into the Python image at `/`; API remains under `/api`; operator PoC at `/ui`
 - **Package manager:** uv
 - **Build:** hatchling
 

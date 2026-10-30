@@ -7,7 +7,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from qdrant_client import QdrantClient
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -37,6 +37,9 @@ class SPAStaticFiles(StaticFiles):
     """Serve the app entry point for frontend routes unknown to the asset server."""
 
     async def get_response(self, path: str, scope: Scope):
+        reserved_prefixes = {"api", "docs", "health", "mcp", "openapi.json", "redoc", "ui"}
+        if path.split("/", maxsplit=1)[0] in reserved_prefixes:
+            raise StarletteHTTPException(status_code=404)
         try:
             return await super().get_response(path, scope)
         except StarletteHTTPException as error:
@@ -128,7 +131,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     vue_dir = Path(__file__).resolve().parent / "static" / "app"
     if vue_dir.is_dir():
-        app.mount("/app", SPAStaticFiles(directory=vue_dir, html=True), name="app")
+
+        @app.get("/app", include_in_schema=False)
+        async def legacy_app_root() -> RedirectResponse:
+            return RedirectResponse("/", status_code=307)
+
+        @app.get("/app/", include_in_schema=False)
+        async def legacy_app_slash() -> RedirectResponse:
+            return RedirectResponse("/", status_code=307)
+
+        @app.get("/app/{path:path}", include_in_schema=False)
+        async def legacy_app_path(path: str) -> RedirectResponse:
+            return RedirectResponse(f"/{path}", status_code=307)
+
+        app.mount("/", SPAStaticFiles(directory=vue_dir, html=True), name="app")
 
     return app
 
@@ -143,6 +159,7 @@ def cli() -> None:
         port=8000,
         reload=settings.debug,
         log_level="info",
+        access_log=False,
         proxy_headers=True,
         forwarded_allow_ips=settings.trusted_proxy_ips,
     )
@@ -161,5 +178,6 @@ def dev() -> None:
         port=8000,
         reload=True,
         log_level="info",
+        access_log=False,
         proxy_headers=False,
     )

@@ -34,10 +34,10 @@ ui: ## Start the Vue/Vite development server at http://127.0.0.1:5173
 	@test -x vue-ui/node_modules/.bin/vite || { printf "Install frontend dependencies first: pnpm --dir vue-ui install\n"; exit 1; }
 	cd vue-ui && ./node_modules/.bin/vite --host 127.0.0.1
 
-prod: ## Start full stack (Qdrant + resonance + TEI)
+prod: ## Start full stack (UI at /, API at /api, Qdrant + resonance + TEI)
 	@printf "$(BLUE)Starting production stack...$(RESET)\n"
 	docker compose up -d --build
-	@printf "$(GREEN)Stack running at http://localhost:8000$(RESET)\n"
+	@printf "$(GREEN)UI: http://localhost:8000/ · API: http://localhost:8000/api$(RESET)\n"
 
 prod-down: ## Stop production stack
 	@printf "$(BLUE)Stopping production stack...$(RESET)\n"
