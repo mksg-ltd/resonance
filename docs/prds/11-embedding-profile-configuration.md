@@ -1,15 +1,18 @@
 ---
-phase: launch
-status: approved-for-implementation
-created: 2026-10-25
-updated: 2026-10-25
+status: completed
 author: strand
-tags: [configuration, embeddings, cleanup]
+tags: [configuration, embeddings, cleanup, completed]
+title: "Proof-of-Concept Cleanup: Embedding Profiles and Legacy File Workflows"
+phase: launch
+created: 2026-10-25
+updated: 2026-10-27
 ---
 
 # Proof-of-Concept Cleanup: Embedding Profiles and Legacy File Workflows
 
-**Status**: Approved for implementation
+**Status**: Completed. The bundled profile catalog, environment-based endpoint
+configuration, Navidrome-only ingestion/search path, and legacy file/M3U cleanup are
+implemented; the implementation plan is verified.
 
 ## Overview
 

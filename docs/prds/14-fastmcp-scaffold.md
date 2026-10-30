@@ -1,18 +1,18 @@
 ---
-phase: foundation
-status: implemented
-created: 2026-10-26
-updated: 2026-10-26
+status: completed
 author: MK
-tags: [mcp, fastmcp, auth, navidrome]
+tags: [mcp, fastmcp, auth, navidrome, scaffold-complete, no-user-tools-yet]
+title: "PRD-14: FastMCP Server Scaffold"
+phase: foundation
+created: 2026-10-26
+updated: 2026-10-27
 ---
 
 # PRD-14: FastMCP Server Scaffold
 
-**Status**: Implemented as an isolated scaffold increment after the Vue
+**Status**: Completed as an isolated scaffold increment after the Vue
 search/review/playlist work in [PRD-13](13-assistant-user-experience.md). The search
-and playlist MCP tools remain deferred until this scaffold and user bearer-auth flow
-are exercised with a real target MCP client.
+and playlist MCP tools remain deferred; the scaffold has no user-facing tools.
 
 ## Purpose
 

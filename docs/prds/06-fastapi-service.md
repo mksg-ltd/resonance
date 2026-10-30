@@ -1,15 +1,28 @@
 ---
-phase: launch
-status: ready
-created: 2026-03-18
-updated: 2026-03-19
+status: completed
 author: mk
-tags: [fastapi, configuration, api, embeddings, playlists]
+tags:
+  [
+    fastapi,
+    configuration,
+    api,
+    embeddings,
+    playlists,
+    historical,
+    architecture-evolved,
+  ]
+title: "FastAPI Service & Configuration"
+phase: launch
+created: 2026-03-18
+updated: 2026-10-27
 ---
 
 # FastAPI Service & Configuration
 
-**Status**: Ready for Development
+**Status**: Completed in the evolved architecture. FastAPI, shared application
+operations, CLI/API adapters, environment settings, and container deployment are in
+place. The original YAML/Jellyfin assumptions were superseded by PRDs 09 and 11; user
+authentication was added later in PRD-12.
 
 ---
 

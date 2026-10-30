@@ -1,17 +1,26 @@
 ---
-phase: implementation
-status: approved-for-implementation
-created: 2026-10-26
-updated: 2026-10-26
+status: completed
 author: MK
-tags: [admin, ingestion, progress, cancellation, qdrant]
+tags:
+  [
+    admin,
+    ingestion,
+    progress,
+    cancellation,
+    qdrant,
+    implemented,
+    operator-acceptance-pending,
+  ]
+title: "PRD-15: Admin Ingestion Jobs"
+phase: implementation
+created: 2026-10-26
+updated: 2026-10-27
 ---
 
 # PRD-15: Admin Ingestion Jobs
 
-**Status**: First admin collection-creation workflow is in `main`. This PRD adds
-observable, stoppable, resumable ingestion runs using the existing collection and
-Qdrant completion semantics.
+**Status**: Implemented in `main` (`b84b2ba`). Live operator acceptance of progress,
+safe stop, resume, and a searchable resulting collection remains outstanding.
 
 ## Purpose
 

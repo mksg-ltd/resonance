@@ -1,15 +1,27 @@
 ---
-phase: launch
-status: ready
-created: 2026-03-18
-updated: 2026-03-18
+status: superseded
 author: mk
-tags: [research, competition, audiomuse, plex]
+tags:
+  [
+    research,
+    competition,
+    audiomuse,
+    plex,
+    superseded,
+    research-not-completed,
+    absorbed-by-prd-10,
+  ]
+title: "Competitive Landscape Research"
+phase: launch
+created: 2026-03-18
+updated: 2026-10-27
 ---
 
 # Competitive Landscape Research
 
-**Status**: Ready for Development
+**Status**: Superseded as a standalone research PRD. The proposed comparisons were not
+completed; the competitor-claims review is carried into the open-source readiness work
+in PRD-10.
 
 ---
 

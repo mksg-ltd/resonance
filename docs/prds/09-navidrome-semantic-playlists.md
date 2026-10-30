@@ -1,13 +1,18 @@
 ---
-phase: proof-of-concept
-status: complete
-backend_status: search-and-ingest-implemented
-backend_completed: 2026-10-25
-completed: 2026-10-25
-updated: 2026-10-25
-created: 2026-10-23
 author: strand
-tags: [playlists, navidrome, semantic-search, lyrics]
+backend_completed: 2026-10-25
+backend_status: search-and-ingest-implemented
+completed: 2026-10-25
+created: 2026-10-23
+phase: proof-of-concept
+status: completed
+tags:
+  - playlists
+  - navidrome
+  - semantic-search
+  - lyrics
+title: Navidrome Semantic Playlists
+updated: 2026-10-27
 ---
 
 # Navidrome Semantic Playlists
@@ -309,7 +314,7 @@ and replacement behavior still require integration tests. Public sharing is opt-
 - [x] API ingestion uses Navidrome without filesystem access, creates or reuses a
       source/library/profile-bound Qdrant collection, and stores deterministic section
       IDs, lyric hashes, index fingerprints, and completeness information.
-- [x] Safe additive re-ingestion skips unchanged complete songs, can finish identical
+- [ ] Safe additive re-ingestion skips unchanged complete songs, can finish identical
       partial writes, and does not prune absent songs. Changed indexed lyrics return
       `refresh_required`; deleted/inaccessible-track reconciliation is not implemented.
 - [x] Semantic search runs in shared application code and is exposed through CLI and

@@ -1,15 +1,27 @@
 ---
-phase: launch
-status: ready
-created: 2026-03-18
-updated: 2026-03-19
+status: superseded
 author: mk
-tags: [crawling, lyrics, ingestion, jellyfin]
+tags:
+  [
+    crawling,
+    lyrics,
+    ingestion,
+    jellyfin,
+    superseded,
+    navidrome-api-replaced-source,
+  ]
+title: "Lyrics Crawling & Library Ingestion"
+phase: launch
+created: 2026-03-18
+updated: 2026-10-27
 ---
 
 # Lyrics Crawling & Library Ingestion
 
-**Status**: Ready for Development
+**Status**: Superseded by the Navidrome API ingestion path in PRD-09. The core need to
+discover library tracks and obtain available lyrics is implemented through Navidrome;
+local-file scanning, Jellyfin lyrics, external crawling, and the proposed manifest were
+not delivered and are not current scope.
 
 ---
 
@@ -44,6 +56,7 @@ Build a lyrics acquisition pipeline that can crawl and index a user's music libr
 Two approaches:
 
 **Direct filesystem scan:**
+
 - Walk the music directory structure (like we do now with `data/`)
 - Match LRC files to audio by filename
 - Extract embedded lyrics from audio metadata
@@ -51,6 +64,7 @@ Two approaches:
 - Con: needs filesystem access to the music library
 
 **Jellyfin API scan:**
+
 - Use Jellyfin's REST API to enumerate the library
 - `/Items?IncludeItemTypes=Audio` → list all songs
 - `/Items/{id}/Lyrics` → fetch lyrics if available
@@ -60,6 +74,7 @@ Two approaches:
 ### Incremental Ingestion
 
 Track what's been ingested:
+
 - Store a manifest (JSON or SQLite) mapping `filepath → hash → qdrant_point_ids`
 - On re-run, skip unchanged files, process new/modified ones
 - Handle deletions — remove orphaned vectors from Qdrant

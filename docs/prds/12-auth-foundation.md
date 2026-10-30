@@ -1,12 +1,13 @@
 ---
-phase: foundation
-status: complete
-created: 2026-10-25
-updated: 2026-10-26
-completed: 2026-10-26
-spec_branch: spec/prd12-auth-foundation
+status: completed
 author: MK
 tags: [authentication, authorization, jwt, navidrome, security]
+title: "PRD-12: User Authentication and Authorization Foundation"
+phase: foundation
+created: 2026-10-25
+updated: 2026-10-27
+completed: 2026-10-26
+spec_branch: spec/prd12-auth-foundation
 ---
 
 # PRD-12: User Authentication and Authorization Foundation

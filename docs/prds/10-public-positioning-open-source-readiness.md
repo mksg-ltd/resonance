@@ -1,15 +1,25 @@
 ---
-phase: launch
-status: draft
-created: 2026-10-23
-updated: 2026-10-23
+status: in-progress
 author: strand
-tags: [positioning, open-source, licensing, security]
+tags:
+  [
+    positioning,
+    open-source,
+    licensing,
+    security,
+    release-readiness,
+    draft-scope,
+  ]
+title: "Public Positioning and Open-Source Readiness"
+phase: launch
+created: 2026-10-23
+updated: 2026-10-27
 ---
 
 # Public Positioning and Open-Source Readiness
 
-**Status**: Draft — for review, not ready for development
+**Status**: In progress at the PRD-scoping stage. This remains a draft and is not an
+implementation approval; the release decisions and evidence gates are still open.
 
 ---
 

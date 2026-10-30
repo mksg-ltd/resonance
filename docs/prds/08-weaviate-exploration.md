@@ -1,15 +1,25 @@
 ---
-phase: launch
-status: ready
-created: 2026-03-18
-updated: 2026-03-18
 author: mk
-tags: [research, weaviate, vector-db, learning]
+created: 2026-03-18
+phase: launch
+status: icebox
+tags:
+  - research
+  - weaviate
+  - vector-db
+  - learning
+  - superseded
+  - qdrant-retained
+  - comparison-not-completed
+title: Weaviate Exploration
+updated: 2026-10-27
 ---
 
 # Weaviate Exploration
 
-**Status**: Ready for Development
+**Status**: Superseded / not pursued. The proposed Weaviate comparison was not
+completed; Resonance continues to use Qdrant, and no Weaviate benchmark result is
+claimed.
 
 ---
 

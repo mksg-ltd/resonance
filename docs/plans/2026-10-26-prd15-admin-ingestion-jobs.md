@@ -1,5 +1,5 @@
 ---
-status: implementation-complete
+status: completed
 approved: true
 iterations: 0
 branch: spec/prd15-ingestion-jobs

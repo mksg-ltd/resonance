@@ -1,19 +1,27 @@
 ---
-phase: discovery
-status: approved-for-implementation
-created: 2026-10-25
-updated: 2026-10-26
 author: MK
-tags: [assistant, mcp, vue, api, playlists, navidrome]
+created: 2026-10-25
+phase: discovery
+status: in-progress
+tags:
+  - assistant
+  - mcp
+  - vue
+  - api
+  - playlists
+  - navidrome
+  - vue-first-slice-complete
+  - mcp-tools-next
+title: "User Search and Playlist Experience: Vue UI and MCP"
+updated: 2026-10-27
 ---
 
 # User Search and Playlist Experience: Vue UI and MCP
 
-**Status**: First increment selected — deliver the direct Vue search-to-private-playlist
-workflow using the authenticated APIs so the user can evaluate match quality. A minimal
-FastMCP scaffold based on the Nool and Obsidian MCP projects can follow before full MCP
-tools; per-user authentication remains a design requirement for those tools. Authentication is implemented in
-[PRD-12](12-auth-foundation.md).
+**Status**: Phase 1, direct Vue search/review/private-playlist workflow, is implemented.
+Phase 2 is the design and implementation of user-facing MCP tools; it has not started.
+The authenticated, tool-free FastMCP foundation is tracked separately in PRD-14.
+Authentication is implemented in [PRD-12](12-auth-foundation.md).
 
 **Relationship to PRD-09**: PRD-09 is complete for the single-account Navidrome
 backend and local operator search/ingestion PoC. This PRD captures the evolving direct

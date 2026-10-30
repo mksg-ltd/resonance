@@ -1,11 +1,12 @@
 ---
-phase: launch
 status: superseded
+author: mk
+tags: [ui, django, jellyfin, playlists, superseded]
+title: "Smart Playlists UI (Superseded)"
+phase: launch
 superseded_by: 06-fastapi-service.md
 created: 2026-03-18
-updated: 2026-03-19
-author: mk
-tags: [ui, django, jellyfin, playlists]
+updated: 2026-10-27
 ---
 
 # Smart Playlists UI (Superseded)

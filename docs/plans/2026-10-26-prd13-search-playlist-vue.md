@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 approved: true
 iterations: 0
 branch: spec/prd13-user-search-playlist

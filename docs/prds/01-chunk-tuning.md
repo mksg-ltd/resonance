@@ -1,15 +1,18 @@
 ---
-phase: launch
-status: ready
-created: 2026-03-18
-updated: 2026-03-18
+status: superseded
 author: mk
-tags: [chunking, embeddings, accuracy]
+tags: [chunking, embeddings, accuracy, historical, learning-era]
+title: "Chunk Size Tuning & Embedding Accuracy"
+phase: launch
+created: 2026-03-18
+updated: 2026-10-27
 ---
 
 # Chunk Size Tuning & Embedding Accuracy
 
-**Status**: Ready for Development
+**Status**: Superseded as a standalone learning experiment. The planned comparison
+benchmark was not completed; search-match evaluation is now tracked with PRD-09 and
+the v1 roadmap.
 
 ---
 
@@ -31,6 +34,7 @@ Systematically evaluate how chunk size (gap threshold) and embedding model choic
 ## Design
 
 Create a benchmark set of queries with expected results (based on what we've validated manually):
+
 - "boyfriend abused manipulated her" → Olivia Rodrigo, Shontelle, Katy Perry Pearl
 - "resilience and empowerment" → Katy Perry Resilient, Madonna I Rise
 - "what have we done to the world" → Earth Song, Everyday Life, Heal the World

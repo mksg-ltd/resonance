@@ -1,15 +1,18 @@
 ---
-phase: launch
-status: ready
-created: 2026-03-18
-updated: 2026-03-18
+status: superseded
 author: mk
-tags: [research, lrc, lyrics, formats]
+tags: [research, lrc, lyrics, formats, superseded, file-based-path-retired]
+title: "Lyrics Format Research"
+phase: launch
+created: 2026-03-18
+updated: 2026-10-27
 ---
 
 # Lyrics Format Research
 
-**Status**: Ready for Development
+**Status**: Superseded by Navidrome's structured-lyrics ingestion path and the removal
+of local LRC ingestion in PRD-11. The original file-format research checklist was not
+completed and is no longer an active product requirement.
 
 ---
 
@@ -32,6 +35,7 @@ Research LRC format variants and alternative lyrics formats to improve parsing r
 ## Design
 
 Research areas:
+
 1. **LRC variants**: simple `[mm:ss.xx]`, enhanced `[mm:ss.xx]<word timestamps>`, ID tags `[ar:Artist]`, `[al:Album]`
 2. **Section tag conventions**: how standardized are `[Chorus]`, `[Verse]` markers? Are there other conventions?
 3. **Jellyfin lyrics**: how does Jellyfin source lyrics? LRC providers? Embedded in audio metadata?

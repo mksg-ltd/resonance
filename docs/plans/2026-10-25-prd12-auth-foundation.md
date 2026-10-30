@@ -1,5 +1,5 @@
 ---
-status: verified
+status: completed
 approved: true
 iterations: 0
 branch: spec/prd12-auth-foundation

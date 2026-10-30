@@ -1,11 +1,12 @@
 ---
-phase: launch
 status: superseded
+author: mk
+tags: [jellyfin, plugin, integration, superseded]
+title: "Jellyfin Plugin Architecture Research (Superseded)"
+phase: launch
 superseded_by: docs/prds/09-navidrome-semantic-playlists.md
 created: 2026-03-18
-updated: 2026-03-19
-author: mk
-tags: [jellyfin, plugin, integration]
+updated: 2026-10-27
 ---
 
 # Jellyfin Plugin Architecture Research (Superseded)
