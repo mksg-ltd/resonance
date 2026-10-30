@@ -76,9 +76,12 @@ The following are codebase observations as of 2026-10-30, not readiness claims:
   floating Qdrant/TEI/uv image references. These are local development defaults, not a
   hardened public deployment profile.
 - AGPL-3.0-only has been selected, the canonical license text is tracked in the root
-  `LICENSE`, and the Python package metadata declares the same identifier. There is no
-  published release artifact license inventory or SBOM.
-  The checked-in Python and frontend lockfiles provide dependency versions, but no
+  `LICENSE`, and the Python package metadata declares the same identifier. The source
+  repository is published on GitHub and Forgejo; no versioned v1 release has been made.
+- `README.md`, `CONTRIBUTING.md`, `docs/README.md`, and `docs/INSTALLATION.md` describe
+  the current product and self-hosted workflow. A clean-install walkthrough by someone
+  other than the maintainer has not yet been recorded.
+- The checked-in Python and frontend lockfiles provide dependency versions, but no
   release artifact license inventory or SBOM is currently maintained.
 
 This baseline replaces the stale pre-Navidrome assumptions in earlier drafts. The
@@ -305,18 +308,38 @@ The v1 readiness gate is met only when all required evidence below is recorded:
 
 ## Prioritization
 
+The source repository is already public. This checklist tracks responsible
+self-hosting and versioned-v1 readiness; completing it is not a prerequisite for the
+repository remaining public. “Evidence” means a linked artifact, recorded result, or
+updated operator documentation that another maintainer can review.
+
+| Status | Step                                                                                                                                                                                                            | Owner      | Completion evidence                                                                                                                              |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [x]    | Publish the source repository and curated project history on GitHub and Forgejo.                                                                                                                                | Maintainer | [GitHub](https://github.com/mksg-ltd/resonance) and [Forgejo](https://source.mfamily.club/mksg/resonance) `main` branches.                       |
+| [x]    | Select AGPL-3.0-only, add its canonical text, and align Python package metadata.                                                                                                                                | Maintainer | Root `LICENSE`; `license = "AGPL-3.0-only"` in `pyproject.toml`.                                                                                 |
+| [x]    | Publish current product, contributor, documentation-history, and installation guidance.                                                                                                                         | Maintainer | `README.md`, `CONTRIBUTING.md`, `docs/README.md`, and `docs/INSTALLATION.md`.                                                                    |
+| [x]    | Set the default network policy: local Compose ports bind to loopback; remote use goes through a trusted TLS proxy.                                                                                              | Maintainer | [Installation guide](../INSTALLATION.md) documents local-only Compose and trusted-proxy requirements.                                            |
+| [ ]    | Confirm copyright ownership/release authority and choose which artifacts will be distributed (source, Python package, container image).                                                                         | Maintainer | Record the decision here; align notices and release process with it.                                                                             |
+| [ ]    | Inventory licenses and notices for Python/frontend dependencies, build tools, base/runtime images, bundled assets, and every distributed artifact. Review selected model weights and provider terms separately. | Maintainer | Version-specific inventory and required notices; unresolved items have an owner or block the affected artifact.                                  |
+| [ ]    | Generate an SBOM for each planned release artifact, or record an approved alternative.                                                                                                                          | Maintainer | SBOM attached to or linked from a versioned release, with source revision and image digest.                                                      |
+| [ ]    | Replace local-development Compose settings with a documented release profile; pin service images, build tools, and model revisions where supported.                                                             | Maintainer | Reviewed Compose configuration; recorded config/network check showing only intended listener ports and no debug/API docs in the release profile. |
+| [ ]    | Verify the authorization and network boundary, including different Navidrome library grants, admin-only writes, private playlist ownership, cookie Origin checks, bearer scope, and backend service exposure.   | Maintainer | Focused automated checks plus a two-account Navidrome acceptance record; denied calls have no side effects.                                      |
+| [ ]    | Review and document data destinations, hosted-inference disclosure, model terms, lyrics handling, and secret/log behavior.                                                                                      | Maintainer | Data-flow guide and canary review confirming no credentials, tokens, or full lyrics leak into normal logs or release artifacts.                  |
+| [ ]    | Complete and record backup/restore, collection deletion, whole-instance removal, and restart/stop behavior during and after ingestion.                                                                          | Maintainer | Repeatable operator procedure and a recorded recovery walkthrough with expected retained/lost state.                                             |
+| [ ]    | Have a person other than the original author follow the guide on a named host OS/architecture and complete login, bounded ingestion, search, and private playlist verification.                                 | Maintainer | Platform and version recorded; issues fixed in docs/code; successful acceptance record.                                                          |
+| [ ]    | Publish versioning, upgrade/rollback, support lifetime, and private vulnerability-reporting instructions.                                                                                                       | Maintainer | Versioned release policy, upgrade notes, and a verified private reporting channel.                                                               |
+| [ ]    | Produce release notes/provenance and run the supported-platform smoke check for the first v1 artifact.                                                                                                          | Maintainer | Release links to source revision, artifact digests, SBOM/notices, and dated smoke-check result.                                                  |
+
+Do not mark a step complete based only on implementation. Attach the evidence named in
+the final column, and keep unsupported platforms or unresolved distribution obligations
+explicitly out of the release claim.
+
 ### Required before calling the product v1-ready
 
-- Decide project licensing and resolve distribution obligations for software,
-  container contents, and bundled assets.
-- Replace development Compose defaults with the secure supported profile and pin
-  release inputs.
-- Complete authorization/network-boundary verification and publish the data-flow,
-  privacy, backup, recovery, and clean-install guidance.
-- Demonstrate a clean install and end-to-end Navidrome workflow on the supported
-  platform, then record release evidence and maintenance/support scope.
+Complete every unchecked row above that applies to the selected distribution. Steps
+that do not apply need a short reason recorded in the checklist or release notes.
 
-### Follow-up after the first responsible public release
+### Follow-up after the first v1 release
 
 - Broader OS/architecture support and installation methods beyond Docker Compose.
 - Automated dependency/model update policy and richer release provenance.
@@ -328,8 +351,7 @@ The v1 readiness gate is met only when all required evidence below is recorded:
 
 ## Open Decisions
 
-These are product-owner or maintainer decisions. They should be resolved while
-shaping this PRD, before a later implementation spec is approved.
+These are maintainer decisions still needed to complete the tracked readiness work.
 
 1. **Project license and ownership:** AGPL-3.0-only is selected and its text and Python
    metadata are present. Confirm copyright ownership and release approval authority,
@@ -337,17 +359,14 @@ shaping this PRD, before a later implementation spec is approved.
    all three.
 2. **Supported platform:** Which host OS and CPU architectures will be tested for the
    v1 Compose install? Is a local CPU embedding profile the minimum supported path?
-3. **Network exposure:** Is loopback-only Compose the supported default, with remote
-   use only through an operator-provided HTTPS proxy? Is LAN HTTP explicitly
-   unsupported?
-4. **Data lifecycle:** Which operator action should remove a Qdrant collection, and
-   should whole-instance deletion preserve or remove the playlist journal by
-   default? What exact backup/restore guarantee is expected?
-5. **Model/provider list:** Which profiles are actively supported at v1, and who
+3. **Data lifecycle:** Admins can delete a collection from the Vue UI. What exact
+   backup/restore guarantee is expected, and should whole-instance deletion preserve
+   or remove the playlist journal by default?
+4. **Model/provider list:** Which profiles are actively supported at v1, and who
    verifies upstream model/weight terms when profile revisions change?
-6. **Support promise:** Is the first release experimental/self-supported, or will
+5. **Support promise:** Is the first release experimental/self-supported, or will
    maintainers commit to a response/update window and supported release lifetime?
-7. **External security contact:** Which public address or repository mechanism will
+6. **External security contact:** Which public address or repository mechanism will
    receive vulnerability reports?
 
 ## References
@@ -371,3 +390,6 @@ shaping this PRD, before a later implementation spec is approved.
   README, package metadata, contributor guidance, installation guide, and project
   document index identify the license. Ownership confirmation and distribution review
   remain release gates.
+- 2026-10-30: Recorded that the source repository is public, marked the license and
+  documentation groundwork complete, and replaced the broad prioritization list with
+  an owner/evidence checklist for remaining self-hosting and v1 release readiness.

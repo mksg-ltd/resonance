@@ -34,11 +34,13 @@ release readiness.
       against the current Navidrome product and release-readiness needs.
 - [x] Select AGPL-3.0-only as the project license.
 - [x] Add the AGPL-3.0-only license text and align Python package metadata.
+- [x] Publish the README, contributor guide, installation guide, and documentation
+      history index.
 - [ ] Complete the distribution inventory, notices, and release artifact review.
 - [ ] Resolve the remaining release gates for dependency/content rights, trust
       boundary, portable deployment, secret/log handling, and accurate capability claims.
-- [ ] Publish the self-hosting guide, contributor guide, and project history index;
-      verify they match a clean install and current service paths.
+- [ ] Verify the documentation and deployment flow in a clean install performed by a
+      person other than the original author.
 - Do not label the project distribution-ready until the agreed gates have evidence.
 
 ## Playlist Visibility Follow-up

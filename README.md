@@ -41,6 +41,20 @@ assets, not those project documents. See
 [docs/README.md](docs/README.md) for product history and a guide to current versus
 historical documents.
 
+## Why Resonance
+
+Music can be discovered through more than listening history, genre, or artist. Resonance
+explores lyric meaning as another way into a personal library: describe a theme, mood,
+or idea, and search for lyric sections with semantically similar language. Because the
+search compares text meaning, matches can come from different eras or genres when their
+lyrics express related ideas.
+
+This is a way to explore music you already have, not a taste predictor or an audio
+streaming service. Similarity is a useful signal, not a verdict about what a song means
+or whether you will like it. Resonance shows lyric evidence so you can decide whether
+the match fits. Results depend on the synced lyrics in your Navidrome library and on the
+chosen embedding model; model behavior and relevance vary.
+
 ## Learning path: from lyrics to semantic search
 
 The indexing pipeline is intentionally readable as a sequence of steps:
