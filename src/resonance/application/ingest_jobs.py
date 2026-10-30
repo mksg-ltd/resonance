@@ -65,6 +65,15 @@ class IngestJobManager:
         with self._lock:
             return [self._serialize(job) for job in reversed(list(self._jobs.values())) if job.owner == owner]
 
+    def is_collection_active(self, collection: str) -> bool:
+        """Return whether an active job is using a known collection name."""
+        with self._lock:
+            return any(
+                job.state in ACTIVE_STATES
+                and (job.request.get("collection") == collection or job.progress.get("collection") == collection)
+                for job in self._jobs.values()
+            )
+
     def get(self, job_id: str, owner: str) -> dict[str, Any]:
         with self._lock:
             return self._serialize(self._owned(job_id, owner))

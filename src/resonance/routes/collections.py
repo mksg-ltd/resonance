@@ -70,6 +70,9 @@ def delete_collection(
     _admin: Annotated[Principal, Depends(require_admin)],
 ) -> dict[str, str]:
     """Delete an indexed collection only when it belongs to an admin-visible library."""
+    ingest_jobs = getattr(request.app.state, "ingest_jobs", None)
+    if ingest_jobs is not None and ingest_jobs.is_collection_active(name):
+        raise HTTPException(status_code=409, detail="Cannot delete a collection while ingestion is using it")
     if name not in {item.name for item in _visible(request, source)}:
         raise HTTPException(status_code=404, detail="Collection not found")
     try:

@@ -69,7 +69,8 @@ more context but can blur distinct ideas; smaller sections can be more precise b
 may lose context or split a thought. Different models and revisions also create
 different vector spaces, so a collection is bound to its profile and dimensionality.
 For experiments, create a separate collection and compare results on a small set of
-queries before indexing a whole library. The admin UI defaults to a 10-track sample.
+queries before indexing a whole library. The admin UI supports a track limit for
+bounded samples; leave it blank to index the full library.
 
 See [Installation and operation](docs/INSTALLATION.md) for a clean self-hosting guide,
 and the source files above for the implementation details.
@@ -229,6 +230,7 @@ General playlist update/delete and automatic uncertain-outcome repair are deferr
 | GET    | `/api/auth/me`                                                  | Current user and accessible libraries           |
 | POST   | `/api/auth/logout`                                              | Revoke current session                          |
 | GET    | `/api/config`, `/api/collections`                               | Authenticated configuration and visible indexes |
+| DELETE | `/api/collections/{name}`                                       | Admin-only permanent collection deletion        |
 | GET    | `/api/embedding-profiles`                                       | Admin-only supported profile catalog            |
 | POST   | `/api/search`                                                   | Search an authorized collection                 |
 | POST   | `/api/ingest`                                                   | Admin-only native library ingestion             |
@@ -301,22 +303,24 @@ remain under `/api` (with health at `/health` and MCP at `/mcp`). The former `/a
 frontend URL redirects to the corresponding root-based page.
 
 Administrators also see a collection setup card. Choose one of the account's accessible
-Navidrome libraries and a supported embedding profile, then start ingestion. The initial
-track limit defaults to 10 so the collection can be sampled before a full run. Leave the
-limit blank to ingest the full library. The Vue UI shows observed counters and supports
+Navidrome libraries and a supported embedding profile, then start ingestion. The track
+limit is blank by default, so ingestion covers the full library after confirmation. Set
+a positive limit to run a bounded sample. The Vue UI shows observed counters and supports
 cooperative stop and explicit resume. Navidrome does not provide a reliable total, so the
 UI does not display a percentage. An optional collection name is a Qdrant name, and a
 new collection is created as part of ingestion. The API rejects reuse when its stored
 library or embedding/index settings are incompatible. Embedding endpoint URLs and keys
 remain environment configuration; the profile catalog exposes only model metadata.
 
-The Vue admin form defaults to 10 tracks. Clear the limit only when you intend to process
-the whole selected library. Stop waits for the current external call and Qdrant batch to
-finish. Job status is in memory and is lost on service restart; the same collection can
-be submitted again, and Qdrant state skips unchanged tracks and resumes identical partial
-writes. The synchronous `POST /api/ingest` remains available for CLI and direct API use.
-This operation adds newly visible songs but does not replace changed lyrics or remove
-deleted songs. The UI does not reset or delete collections.
+The admin page also lists accessible collections and allows an administrator to
+permanently delete a collection after confirmation. Deletion is blocked while an
+active ingestion job is using that collection. Stop waits for the current external
+call and Qdrant batch to finish. Job status is in memory and is lost on service
+restart; the same collection can be submitted again, and Qdrant state skips unchanged
+tracks and resumes identical partial writes. The synchronous `POST /api/ingest`
+remains available for CLI and direct API use. Ingestion adds newly visible songs but
+does not replace changed lyrics or remove deleted songs automatically; deleting an
+entire collection is available on the admin page.
 
 ### FastMCP Scaffold
 

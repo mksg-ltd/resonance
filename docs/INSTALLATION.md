@@ -52,8 +52,9 @@ make prod
 
 The UI is at <http://127.0.0.1:8000/>. Sign in with a Navidrome account. An admin
 account can select a library and profile and create a collection by starting
-ingestion. Begin with the default 10-track sample, check progress and search quality,
-then clear the limit only when ready to ingest the whole library. Ingestion can be
+ingestion. The track limit starts blank, so the default action indexes the full library
+after a confirmation. Set a positive limit to run a bounded sample and check progress
+and search quality first. Ingestion can be
 stopped at safe work boundaries and explicitly resumed from the UI.
 
 ## Embedding and indexing experiments
@@ -100,8 +101,10 @@ wait for it to finish before updates or restarts. In-memory job progress and log
 sessions do not survive a restart, but completed Qdrant writes remain and identical
 ingestion work can resume.
 
-To stop the stack while keeping data, use `make prod-down`. To remove a collection,
-use the admin UI/API. To remove all instance data, first stop the stack, then remove
+To stop the stack while keeping data, use `make prod-down`. On the admin page, the
+existing collections list can permanently delete a collection and its indexed data;
+the UI asks for confirmation, and deletion is blocked while that collection is being
+ingested. To remove all instance data, first stop the stack, then remove
 the contents of `data/` and the legacy `playlist_state` volume if it is no longer
 needed. This permanently deletes indexed lyrics, vectors, caches, and the operation
 journal.

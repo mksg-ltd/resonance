@@ -15,11 +15,14 @@ const embeddingProfiles = ref([]);
 const adminLibraryId = ref("");
 const adminProfileId = ref("");
 const newCollectionName = ref("");
-const initialTrackLimit = ref("10");
+const initialTrackLimit = ref("");
 const adminBusy = ref(false);
+const deletingCollection = ref("");
 const adminError = ref("");
 const adminMessage = ref("");
 const adminMessageType = ref("info");
+const collectionsError = ref("");
+const collectionsMessage = ref("");
 const ingestJobs = ref([]);
 let ingestPoller;
 const activeIngestJob = computed(() => ingestJobs.value.find((job) => ["queued", "running", "stopping"].includes(job.state)) || null);
@@ -152,6 +155,29 @@ async function loadCollections() {
     selectedCollectionName.value = collections.value[0]?.name || "";
   }
   previousCollectionName.value = selectedCollectionName.value;
+}
+
+async function deleteCollection(collection) {
+  if (!user.value?.is_admin || adminBusy.value || deletingCollection.value) return;
+  const confirmed = window.confirm(
+    `Permanently delete collection “${collection.name}” and its indexed lyrics and vectors? This cannot be undone.`,
+  );
+  if (!confirmed) return;
+
+  deletingCollection.value = collection.name;
+  collectionsError.value = "";
+  collectionsMessage.value = "";
+  try {
+    await request(`/api/collections/${encodeURIComponent(collection.name)}`, { method: "DELETE" });
+    const wasSelected = selectedCollectionName.value === collection.name;
+    await loadCollections();
+    if (wasSelected) clearDiscovery();
+    collectionsMessage.value = `Collection ${collection.name} and its indexed data were deleted.`;
+  } catch (reason) {
+    collectionsError.value = reason.message;
+  } finally {
+    deletingCollection.value = "";
+  }
 }
 
 async function loadAdminSetup() {
@@ -760,8 +786,8 @@ onUnmounted(() => {
           <label>Collection name <span class="muted">Optional; leave blank to generate a name</span>
             <input v-model="newCollectionName" maxlength="255" autocomplete="off" placeholder="e.g. library-model-experiment" :disabled="adminBusy" />
           </label>
-          <label>Initial track limit <span class="muted">Defaults to 10; leave blank to ingest the full library</span>
-            <input v-model="initialTrackLimit" type="number" min="1" step="1" placeholder="10" :disabled="adminBusy" />
+          <label>Initial track limit <span class="muted">Optional; leave blank to ingest the full library</span>
+            <input v-model="initialTrackLimit" type="number" min="1" step="1" placeholder="No limit" :disabled="adminBusy" />
           </label>
           <p v-if="!libraries.length" class="muted">No Navidrome libraries are available to this account.</p>
           <p v-if="adminError" class="error" role="alert">{{ adminError }}</p>
@@ -782,6 +808,34 @@ onUnmounted(() => {
           <p v-if="job.error_message" class="error">{{ job.error_message }}</p>
           <button v-if="job.can_resume" class="quiet small-button" :disabled="adminBusy" @click="resumeIngestJob(job)">Resume same request</button>
         </div>
+      </section>
+
+      <section v-if="user.is_admin && isAdminPage" class="card admin-card collections-card">
+        <div class="section-heading">
+          <div><p class="eyebrow accent">INDEX MANAGEMENT</p><h2>Existing collections</h2></div>
+          <span class="count">{{ collections.length }}</span>
+        </div>
+        <p class="muted">Deleting a collection permanently removes its indexed lyric sections and vectors from Qdrant.</p>
+        <p v-if="collectionsError" class="error" role="alert">{{ collectionsError }}</p>
+        <p v-if="collectionsMessage" class="admin-result message-success" role="status">{{ collectionsMessage }}</p>
+        <p v-if="!collections.length" class="empty-state">There are no indexed collections in your accessible libraries.</p>
+        <template v-for="library in libraries" :key="library.id">
+          <div v-if="collectionsFor(library.id).length" class="managed-library">
+            <h3>{{ library.name || library.id }}</h3>
+            <div v-for="collection in collectionsFor(library.id)" :key="collection.name" class="managed-collection">
+              <div class="managed-collection-copy">
+                <strong>{{ collection.name }}</strong>
+                <span>{{ collection.model || collection.provider || "Embedding profile" }} · {{ collection.points_count }} points</span>
+              </div>
+              <button
+                class="quiet danger-button"
+                :disabled="adminBusy || !!deletingCollection"
+                :aria-label="`Delete collection ${collection.name}`"
+                @click="deleteCollection(collection)"
+              >{{ deletingCollection === collection.name ? "Deleting…" : "Delete" }}</button>
+            </div>
+          </div>
+        </template>
       </section>
 
       <section v-if="!isAdminPage" class="card search-card">

@@ -53,10 +53,21 @@ input:focus { border-color: #c9f36a; box-shadow: 0 0 0 3px #c9f36a19; }
 .admin-form { gap: 14px; }
 .admin-form label > .muted { font-size: 11px; font-weight: 400; }
 .admin-profile-detail { margin: -7px 0 0; text-align: left; }
-.admin-result { margin: 0; padding: 12px 14px; border: 1px solid #ffffff18; border-radius: 8px; font-size: 12px; line-height: 1.55; }
+.admin-result { margin: 0; padding: 12px 14px; border: 1px solid #ffffff18; border-radius: 8px; font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
 .admin-result.message-success { color: #d4f790; border-color: #c9f36a55; background: #c9f36a0a; }
 .admin-result.message-info { color: #b8caff; border-color: #8ca9ff55; background: #8ca9ff0a; }
 .admin-result.message-error { color: #ff9aa3; border-color: #ff8e9855; background: #ff8e980a; }
+.ingest-job { min-width: 0; margin-top: 18px; padding-top: 16px; border-top: 1px solid #ffffff12; }
+.job-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
+.ingest-job .muted { margin: 0 0 8px; font-size: 12px; overflow-wrap: anywhere; }
+.collections-card > .muted { margin-bottom: 14px; }
+.managed-library { margin-top: 18px; }
+.managed-library > h3 { padding-bottom: 8px; color: #9ba6b6; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+.managed-collection { display: flex; align-items: center; gap: 14px; min-width: 0; padding: 12px 0; border-top: 1px solid #ffffff10; }
+.managed-collection-copy { display: grid; flex: 1; gap: 4px; min-width: 0; }
+.managed-collection-copy strong { overflow-wrap: anywhere; font-size: 13px; }
+.managed-collection-copy span { color: #79869a; font-size: 11px; overflow-wrap: anywhere; }
+.danger-button { flex: 0 0 auto; color: #ffabb2; border-color: #ff8e9855; }
 select, textarea { width: 100%; color: #edf1f8; background: #0b1119; border: 1px solid #334152; border-radius: 8px; outline: none; }
 select { height: 44px; padding: 0 12px; }
 textarea { min-height: 88px; padding: 12px; line-height: 1.5; resize: vertical; }
